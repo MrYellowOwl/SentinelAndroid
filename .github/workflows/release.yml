@@ -1,0 +1,86 @@
+name: Build & release APK
+
+# Builds the app and publishes the APK to a GitHub Release. The in-app updater
+# (Settings → Updates) reads the latest release and installs it.
+#
+# Trigger by pushing a version tag:   git tag v1.1.0 && git push origin v1.1.0
+# (bump versionCode/versionName in app/build.gradle.kts first).
+#
+# For the in-app updater to work across versions the APK must be signed with a
+# STABLE key every time. Add these repository secrets once (Settings → Secrets):
+#   SIGNING_KEYSTORE_B64  - base64 of your release .jks  (base64 -w0 release.jks)
+#   SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, SIGNING_KEY_PASSWORD
+# Without them the job still builds a debug-signed APK so you have something to
+# install, but debug keys differ per build and won't satisfy in-app updates.
+
+on:
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write                # create the release and upload the APK
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode keystore
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "storeFile=$RUNNER_TEMP/release.jks"
+              echo "storePassword=${{ secrets.SIGNING_STORE_PASSWORD }}"
+              echo "keyAlias=${{ secrets.SIGNING_KEY_ALIAS }}"
+              echo "keyPassword=${{ secrets.SIGNING_KEY_PASSWORD }}"
+            } > keystore.properties
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No signing secrets set — building a debug-signed APK." >&2
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build APK
+        run: |
+          chmod +x ./gradlew
+          if [ "${{ steps.keystore.outputs.signed }}" = "true" ]; then
+            ./gradlew :app:assembleRelease --no-daemon
+          else
+            ./gradlew :app:assembleDebug --no-daemon
+          fi
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(find app/build/outputs/apk -name "*.apk" ! -name "*unsigned*" | head -n1)
+          test -n "$APK" || { echo "No APK produced"; exit 1; }
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+          echo "Built: $APK"
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.path }}
+          generate_release_notes: true
+
+      - name: Upload APK artifact (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sentinel-apk
+          path: ${{ steps.apk.outputs.path }}

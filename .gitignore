@@ -1,0 +1,16 @@
+/.gradle
+/.kotlin
+/local.properties
+/.idea
+/build
+/app/build
+/app/release
+/wear/build
+/wear/release
+*.iml
+*.apk
+*.aab
+# Release signing secrets — never commit these
+keystore.properties
+*.jks
+*.keystore

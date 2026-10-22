@@ -1,0 +1,1707 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+
+package com.yellowowl.sentinel
+
+import android.text.format.DateUtils
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontFamily
+import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.Manifest
+
+// ---------------------------------------------------------------- Dashboard
+
+@Composable
+internal fun DashboardScreen(
+    modifier: Modifier,
+    findings: List<Finding>,
+    alertsEnabled: Boolean,
+    onAlertsChange: (Boolean) -> Unit,
+    onOpen: (AppScreen) -> Unit,
+    onOpenFindings: (Severity?) -> Unit
+) {
+    val counts = FindingMerge.countBySeverity(findings)
+    val high = counts[Severity.HIGH] ?: 0
+    val medium = counts[Severity.MEDIUM] ?: 0
+    val low = counts[Severity.LOW] ?: 0
+    val priorities = FindingMerge.prioritized(findings).filter { it.severity != Severity.INFO }.take(3)
+
+    Column(
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Eyebrow("SECURITY OVERVIEW")
+        Text("Your security,\nat a glance.", fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, color = TextMain)
+
+        val (postureIcon, postureColor, postureTitle, postureText) = when {
+            findings.isEmpty() -> Quad(Icons.Filled.Lock, Accent, "No scans yet", "Scan your Wi-Fi network or audit a website to see your security picture.")
+            high > 0 -> Quad(Icons.Filled.WarningAmber, HighColor, "$high high-severity issue(s)", "Fix these first. Each finding includes a recommended action.")
+            medium > 0 -> Quad(Icons.Filled.WarningAmber, MediumColor, "$medium issue(s) worth reviewing", "No high-severity issues. Review the medium findings when you can.")
+            else -> Quad(Icons.Filled.CheckCircle, Accent, "No high or medium issues", "Nice. Re-run your scans after changes to your network or website.")
+        }
+        SurfaceCard(border = BorderStroke(1.dp, postureColor.copy(alpha = 0.45f))) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(48.dp).background(postureColor.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(postureIcon, contentDescription = null, tint = postureColor, modifier = Modifier.size(26.dp))
+                }
+                Spacer(Modifier.width(13.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(postureTitle, fontWeight = FontWeight.Bold, color = TextMain, fontSize = 16.sp)
+                    Text(postureText, fontSize = 13.sp, color = TextMuted, lineHeight = 18.sp)
+                }
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            StatCard("High", high, HighColor, Modifier.weight(1f)) { onOpenFindings(Severity.HIGH) }
+            StatCard("Medium", medium, MediumColor, Modifier.weight(1f)) { onOpenFindings(Severity.MEDIUM) }
+            StatCard("Low", low, LowColor, Modifier.weight(1f)) { onOpenFindings(Severity.LOW) }
+        }
+
+        if (priorities.isNotEmpty()) {
+            SectionHeader("TOP PRIORITIES", "Start here")
+            priorities.forEach { finding ->
+                SurfaceCard(onClick = { onOpenFindings(null) }) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        SeverityBadge(finding.severity)
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(finding.title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(finding.target, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = TextMuted)
+                    }
+                }
+            }
+        }
+
+        SectionHeader("TOOLS", "Run a check")
+        ToolCard(
+            title = "Network scan",
+            subtitle = "Find devices on your Wi-Fi and spot risky open services.",
+            icon = Icons.Filled.Router,
+            onClick = { onOpen(AppScreen.Network) }
+        )
+        ToolCard(
+            title = "Website audit",
+            subtitle = "Check HTTPS, certificate expiry, security headers and cookies.",
+            icon = Icons.Filled.Language,
+            onClick = { onOpen(AppScreen.Website) }
+        )
+        ToolCard(
+            title = "Findings & reports",
+            subtitle = "Review issues by priority and share an HTML report.",
+            icon = Icons.Filled.Assessment,
+            onClick = { onOpenFindings(null) }
+        )
+
+        SurfaceCard {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(value = alertsEnabled, role = Role.Switch, onValueChange = onAlertsChange)
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.NotificationsActive, contentDescription = null, tint = Accent, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Alerts on phone & watch", color = TextMain, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(
+                        "Notify me when a network scan finishes or finds high-severity issues. Paired Galaxy and Wear OS watches show these too.",
+                        color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked = alertsEnabled,
+                    onCheckedChange = null,
+                    colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent)
+                )
+            }
+        }
+
+        SurfaceCard {
+            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Lock, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "Private by design: results stay on this phone. No accounts, no tracking, nothing uploaded unless you share a report.",
+                    fontSize = 12.sp, color = TextMuted, lineHeight = 17.sp
+                )
+            }
+        }
+        Text(
+            "Sentinel ${BuildConfig.VERSION_NAME} · Automated checks are indicators, not proof of exploitability. Only test systems you own or are authorized to assess.",
+            color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp
+        )
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+private data class Quad(val icon: ImageVector, val color: Color, val title: String, val text: String)
+
+@Composable
+private fun StatCard(title: String, value: Int, tint: Color, modifier: Modifier, onClick: () -> Unit) {
+    SurfaceCard(modifier = modifier, onClick = onClick) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(value.toString(), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = if (value > 0) tint else TextMain)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(tint, CircleShape))
+                Spacer(Modifier.width(6.dp))
+                Text(title, fontSize = 12.sp, color = TextMuted)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
+    SurfaceCard(onClick = onClick) {
+        Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(46.dp).background(SurfaceRaised, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(24.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(subtitle, color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = TextMuted)
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Network
+
+@Composable
+internal fun NetworkScreen(
+    modifier: Modifier,
+    state: NetworkUiState,
+    onAppear: () -> Unit,
+    onAuthorize: (Boolean) -> Unit,
+    onStart: () -> Unit,
+    onCancel: () -> Unit,
+    profile: ScanProfile,
+    onSetProfile: (ScanProfile) -> Unit,
+    monitoring: Boolean,
+    onMonitorChange: (Boolean) -> Unit,
+    nicknames: Map<String, String>,
+    onOpenHost: (String) -> Unit,
+    onViewFindings: () -> Unit
+) {
+    LaunchedEffect(Unit) { onAppear() }
+    val range = state.range
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item { ScreenHeading("Network scan", "Finds devices on your current Wi-Fi and checks common services.") }
+        item {
+            SurfaceCard {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Eyebrow("CURRENT NETWORK")
+                            Text(
+                                range?.cidr ?: if (state.checked) "No Wi-Fi network found" else "Checking…",
+                                color = TextMain, fontSize = 20.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                        IconButton(onClick = onAppear, enabled = !state.scanning) {
+                            Icon(Icons.Filled.Refresh, contentDescription = "Re-detect network", tint = TextMuted)
+                        }
+                    }
+                    if (range != null) {
+                        Text(
+                            buildString {
+                                append("This phone: ${range.phoneIp}")
+                                range.gatewayIp?.let { append(" · Router: $it") }
+                                append("\nChecks ${range.hostCount} addresses")
+                            },
+                            color = TextMuted, fontSize = 13.sp, lineHeight = 19.sp
+                        )
+                    } else if (state.checked) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(Icons.Filled.WifiOff, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Connect to a private Wi-Fi or Ethernet network, then tap refresh. Mobile data and public addresses can't be scanned.",
+                                color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = Border)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = state.authorized,
+                                enabled = range != null && !state.scanning,
+                                role = Role.Checkbox,
+                                onValueChange = onAuthorize
+                            ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = state.authorized,
+                            onCheckedChange = null,
+                            enabled = range != null && !state.scanning,
+                            colors = CheckboxDefaults.colors(checkedColor = Accent, checkmarkColor = OnAccent)
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Column {
+                            Text("I own this network or have permission to scan it.", color = TextMain, fontSize = 13.sp, lineHeight = 18.sp)
+                            Text("Remembered for this network. Also allows scans started from your watch.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("SCAN DEPTH", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            ScanProfile.entries.forEach { p ->
+                                FilterChip(
+                                    selected = profile == p,
+                                    onClick = { if (!state.scanning) onSetProfile(p) },
+                                    enabled = !state.scanning,
+                                    label = { Text("${p.label} · ${p.blurb}", fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = SurfaceRaised, labelColor = TextMuted,
+                                        selectedContainerColor = Accent.copy(alpha = 0.18f), selectedLabelColor = Accent
+                                    ),
+                                    border = FilterChipDefaults.filterChipBorder(enabled = true, selected = profile == p, borderColor = Border, selectedBorderColor = Accent.copy(alpha = 0.6f))
+                                )
+                            }
+                        }
+                    }
+                    if (state.scanning) {
+                        OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth(), border = BorderStroke(1.dp, Border)) {
+                            Icon(Icons.Filled.Stop, contentDescription = null, tint = TextMain)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Cancel scan", color = TextMain, fontWeight = FontWeight.Bold)
+                        }
+                        val progress = state.progress
+                        Text(
+                            progress?.let { "${it.phase}… ${(it.overall * 100).toInt()}%" } ?: (state.message ?: "Starting…"),
+                            color = TextMuted, fontSize = 13.sp
+                        )
+                        if (progress != null) {
+                            LinearProgressIndicator(
+                                progress = { progress.overall },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Accent,
+                                trackColor = SurfaceRaised
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Accent, trackColor = SurfaceRaised)
+                        }
+                        Text("The scan keeps running if you switch tabs or leave the app.", color = TextMuted, fontSize = 12.sp)
+                    } else {
+                        PrimaryButton(
+                            text = "Start scan",
+                            icon = Icons.Filled.PlayArrow,
+                            enabled = range != null && state.authorized,
+                            onClick = onStart
+                        )
+                        if (range != null && !state.authorized) {
+                            Text("Tick the box above to enable scanning.", color = TextMuted, fontSize = 12.sp)
+                        }
+                    }
+                    if (!state.scanning) {
+                        state.message?.let {
+                            Text(it, color = if (state.isError) HighColor else Accent, fontSize = 13.sp, lineHeight = 18.sp)
+                        }
+                    }
+                    if (state.lastResult != null && !state.scanning) {
+                        TextButton(onClick = onViewFindings, contentPadding = PaddingValues(0.dp)) {
+                            Text("View issues in Findings", color = Accent)
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Accent)
+                        }
+                    }
+                    HorizontalDivider(color = Border)
+                    Row(
+                        Modifier.fillMaxWidth().toggleable(value = monitoring, enabled = state.authorized || monitoring, role = Role.Switch, onValueChange = onMonitorChange),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Monitor this network", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (monitoring) "Rescanning every ~30 min · alerts on new devices and port changes." else "Background rescans that alert when a new device joins or a port opens.",
+                                color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Switch(checked = monitoring, onCheckedChange = null, enabled = state.authorized || monitoring, colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent))
+                    }
+                }
+            }
+        }
+        item {
+            Column {
+                Eyebrow("DEVICES · ${state.devices.size}")
+                if (state.devices.isEmpty() && !state.scanning) {
+                    Text(
+                        if (state.lastResult == null) "Devices will appear here after a scan. Some devices ignore all connection attempts and may not be listed."
+                        else "No devices answered. Some devices ignore all connection attempts.",
+                        color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp)
+                    )
+                }
+            }
+        }
+        items(state.devices, key = { it.ipAddress }) { device -> DeviceCard(device, nicknames) { onOpenHost(device.ipAddress) } }
+    }
+}
+
+@Composable
+private fun DeviceCard(device: DeviceResult, nicknames: Map<String, String>, onClick: () -> Unit) {
+    val name = Nicknames.displayName(device, nicknames)
+    SurfaceCard(onClick = onClick) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val icon = when {
+                    device.isThisDevice -> Icons.Filled.PhoneAndroid
+                    device.isGateway -> Icons.Filled.Router
+                    else -> Icons.Filled.Devices
+                }
+                Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(name, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val sub = listOfNotNull(
+                        device.ipAddress.takeIf { it != name },
+                        device.vendor,
+                        device.kind,
+                        device.mac
+                    )
+                    if (sub.isNotEmpty()) Text(sub.joinToString(" · "), color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                when {
+                    device.isThisDevice -> Tag("This phone")
+                    device.isGateway -> Tag("Router")
+                }
+            }
+            if (device.openPorts.isEmpty()) {
+                Text("Found via discovery; none of the checked ports are open.", color = TextMuted, fontSize = 13.sp)
+            } else {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    device.openPorts.forEach { port ->
+                        val tint = PortCatalog.riskFor(port.port)?.severity?.color() ?: TextMuted
+                        Box(Modifier.background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 5.dp)) {
+                            Text("${port.service} · ${port.port}", color = tint, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                val versions = device.openPorts.mapNotNull { it.fingerprint?.let { fp -> "${it.service}: ${fp.display}" } }
+                if (versions.isNotEmpty()) {
+                    Text(versions.joinToString(" · "), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Website
+
+@Composable
+internal fun WebsiteAuditScreen(
+    modifier: Modifier,
+    state: WebUiState,
+    onUrlChange: (String) -> Unit,
+    onWpChecksChange: (Boolean) -> Unit,
+    onRun: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+    val run = {
+        focusManager.clearFocus()
+        onRun()
+    }
+    Column(
+        modifier = modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        ScreenHeading("Website audit", "Checks HTTPS, the TLS certificate, security headers and cookies.")
+        SurfaceCard {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = state.url,
+                    onValueChange = onUrlChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    enabled = !state.busy,
+                    label = { Text("Website address") },
+                    placeholder = { Text("yourdomain.com") },
+                    leadingIcon = { Icon(Icons.Filled.Language, contentDescription = null) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),
+                    keyboardActions = KeyboardActions(onGo = { run() })
+                )
+                Text(
+                    "Only audit sites you own or are authorized to test. Sentinel sends a few ordinary page requests; it never submits forms or attacks the site.",
+                    color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp
+                )
+                Row(
+                    Modifier.fillMaxWidth().toggleable(value = state.wpChecks, enabled = !state.busy, role = Role.Switch, onValueChange = onWpChecksChange),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Include WordPress checks", color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Version, user enumeration, XML-RPC, plugin/theme CVEs, exposed files.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(checked = state.wpChecks, onCheckedChange = null, enabled = !state.busy, colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent))
+                }
+                PrimaryButton(
+                    text = if (state.busy) "Auditing…" else "Run audit",
+                    icon = Icons.Filled.PlayArrow,
+                    enabled = !state.busy && state.url.isNotBlank(),
+                    busy = state.busy,
+                    onClick = run
+                )
+                state.error?.let { Text(it, color = HighColor, fontSize = 13.sp, lineHeight = 18.sp) }
+            }
+        }
+
+        state.result?.let { result ->
+            val counts = FindingMerge.countBySeverity(result.findings)
+            SurfaceCard {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Eyebrow("RESULT")
+                    Text(result.finalUrl, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    result.statusCode?.let { Text("HTTP $it", color = TextMuted, fontSize = 12.sp) }
+                    if (result.redirectChain.size > 1) {
+                        Text("Redirects: " + result.redirectChain.joinToString(" → "), color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp)
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                        Severity.entries.forEach { severity ->
+                            val count = counts[severity] ?: 0
+                            if (count > 0) Text("$count ${severity.label}", color = severity.color(), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    state.wpDetected?.let {
+                        Text(
+                            if (it) "WordPress detected — WordPress checks included." else "WordPress checks ran; this site didn't look like WordPress.",
+                            color = if (it) Accent else TextMuted, fontSize = 12.sp
+                        )
+                    }
+                    Text("Saved to Findings. Re-running replaces the previous results for this site.", color = TextMuted, fontSize = 12.sp)
+                }
+            }
+            result.findings.forEach { FindingCard(it) }
+        }
+
+        Text(
+            "This is a baseline configuration check, not a full penetration test. Missing headers are recommendations, not proof that the site can be hacked.",
+            color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp
+        )
+    }
+}
+
+// ---------------------------------------------------------------- Findings
+
+@Composable
+internal fun FindingsScreen(
+    modifier: Modifier,
+    findings: List<Finding>,
+    filter: Severity?,
+    vulnDb: VulnDbStatus,
+    onUpdateDb: () -> Unit,
+    onFilter: (Severity?) -> Unit,
+    onExport: (ReportExporter.Format) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: (String) -> Unit
+) {
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
+    val counts = FindingMerge.countBySeverity(findings)
+    val visible = remember(findings, filter) {
+        FindingMerge.prioritized(findings).filter { filter == null || it.severity == filter }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Clear all findings?") },
+            text = { Text("This deletes all ${findings.size} saved findings from this phone. It can't be undone.") },
+            confirmButton = {
+                TextButton(onClick = { confirmClear = false; onClear() }) { Text("Clear all", color = HighColor) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("Cancel") }
+            },
+            containerColor = SurfaceColor
+        )
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Column {
+                ScreenHeading("Findings", "Highest priority first. Each scan replaces its previous results.")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = { onExport(ReportExporter.Format.HTML) },
+                        enabled = findings.isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)
+                    ) {
+                        Icon(Icons.Filled.Share, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Share report", fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = { confirmClear = true }, enabled = findings.isNotEmpty()) {
+                        Icon(Icons.Filled.DeleteOutline, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Clear")
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    Text("Export:", color = TextMuted, fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterVertically))
+                    OutlinedButton(onClick = { onExport(ReportExporter.Format.CSV) }, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border)) {
+                        Text("CSV", color = Accent, fontSize = 13.sp)
+                    }
+                    OutlinedButton(onClick = { onExport(ReportExporter.Format.JSON) }, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border)) {
+                        Text("JSON", color = Accent, fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+        item { VulnDbCard(vulnDb, onUpdateDb) }
+        item {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SeverityChip("All · ${findings.size}", filter == null, Accent) { onFilter(null) }
+                Severity.entries.forEach { severity ->
+                    SeverityChip("${severity.label} · ${counts[severity] ?: 0}", filter == severity, severity.color()) {
+                        onFilter(if (filter == severity) null else severity)
+                    }
+                }
+            }
+        }
+        if (visible.isEmpty()) {
+            item {
+                SurfaceCard {
+                    Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Accent, modifier = Modifier.size(34.dp))
+                        Text(if (findings.isEmpty()) "Nothing saved yet" else "No ${filter?.label?.lowercase()} findings", color = TextMain, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (findings.isEmpty()) "Run a network scan or website audit to build your first report." else "Choose another filter to see the rest.",
+                            color = TextMuted, fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        } else {
+            items(visible, key = { it.id }) { finding -> FindingCard(finding, onDismiss = { onDismiss(finding.id) }) }
+        }
+    }
+}
+
+@Composable
+private fun VulnDbCard(status: VulnDbStatus, onUpdate: () -> Unit) {
+    SurfaceCard {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Shield, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Vulnerability database", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                val line = if (status.count == 0) "No entries yet — tap Update."
+                else "${status.count} CVEs · ${status.updated} · ${status.source.substringAfterLast('/').ifBlank { status.source }}"
+                Text(line, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                status.message?.let { Text(it, color = if (status.isError) HighColor else Accent, fontSize = 11.sp, lineHeight = 15.sp) }
+            }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = onUpdate, enabled = !status.updating, border = BorderStroke(1.dp, Border)) {
+                if (status.updating) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Accent)
+                } else {
+                    Icon(Icons.Filled.Refresh, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(if (status.updating) "Updating" else "Update", color = Accent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeverityChip(label: String, selected: Boolean, color: Color, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, fontSize = 13.sp) },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = SurfaceColor,
+            labelColor = TextMuted,
+            selectedContainerColor = color.copy(alpha = 0.18f),
+            selectedLabelColor = color
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = Border,
+            selectedBorderColor = color.copy(alpha = 0.6f)
+        )
+    )
+}
+
+// ---------------------------------------------------------------- Shared components
+
+@Composable
+internal fun FindingCard(finding: Finding, onDismiss: (() -> Unit)? = null) {
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SeverityBadge(finding.severity)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "${finding.source} · ${DateUtils.getRelativeTimeSpanString(finding.createdAt)}",
+                    color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(finding.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 20.sp)
+            Text(finding.target, color = Accent, fontSize = 12.sp)
+            Text(finding.details, color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+            HorizontalDivider(color = Border)
+            Text("WHAT TO DO", color = TextMain, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+            Text(finding.remediation, color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+            if (onDismiss != null) {
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Dismiss", color = TextMuted, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SeverityBadge(severity: Severity) {
+    val color = severity.color()
+    Box(Modifier.background(color.copy(alpha = 0.15f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Text(severity.label.uppercase(), color = color, fontSize = 11.sp, fontWeight = FontWeight.Black, letterSpacing = 0.6.sp)
+    }
+}
+
+@Composable
+private fun Tag(text: String) {
+    Box(Modifier.background(Accent.copy(alpha = 0.14f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+        Text(text, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun PrimaryButton(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    busy: Boolean = false
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().height(50.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)
+    ) {
+        if (busy) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = OnAccent)
+        else Icon(icon, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text(text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+    }
+}
+
+@Composable
+private fun SurfaceCard(
+    modifier: Modifier = Modifier,
+    border: BorderStroke = BorderStroke(1.dp, Border),
+    onClick: (() -> Unit)? = null,
+    content: @Composable () -> Unit
+) {
+    val colors = CardDefaults.cardColors(containerColor = SurfaceColor)
+    val shape = RoundedCornerShape(16.dp)
+    if (onClick != null) {
+        Card(onClick = onClick, modifier = modifier, colors = colors, shape = shape, border = border) { content() }
+    } else {
+        Card(modifier = modifier, colors = colors, shape = shape, border = border) { content() }
+    }
+}
+
+@Composable
+private fun Eyebrow(text: String) {
+    Text(text, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.3.sp)
+}
+
+@Composable
+private fun SectionHeader(eyebrow: String, title: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.padding(top = 4.dp)) {
+        Eyebrow(eyebrow)
+        Text(title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+    }
+}
+
+@Composable
+private fun ScreenHeading(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+        Text(title, color = TextMain, fontSize = 25.sp, fontWeight = FontWeight.Bold, lineHeight = 29.sp)
+        Text(subtitle, color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+    }
+}
+
+// ---------------------------------------------------------------- Host walkthrough
+
+private val URL_REGEX = Regex("""https?://\S+""")
+
+@Composable
+internal fun HostDetailScreen(
+    modifier: Modifier,
+    device: DeviceResult,
+    findings: List<Finding>,
+    annotations: Map<String, FindingAnnotation>,
+    rescanning: Boolean,
+    nickname: String?,
+    onSetNickname: (String) -> Unit,
+    onBack: () -> Unit,
+    onRescan: () -> Unit,
+    onStatus: (Finding, FindingStatus) -> Unit,
+    onNotes: (Finding, String) -> Unit,
+    onCopy: (String) -> Unit,
+    onOpenUrl: (String) -> Unit
+) {
+    val ordered = remember(findings) { FindingMerge.prioritized(findings) }
+    val openCount = ordered.count { annotations[it.key]?.status.let { s -> s != FindingStatus.FIXED && s != FindingStatus.FALSE_POSITIVE } }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Accent, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Devices", color = Accent)
+                }
+                val shownName = nickname?.takeIf { it.isNotBlank() } ?: device.displayName
+                Text(shownName, color = TextMain, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp)
+                val sub = listOfNotNull(device.ipAddress.takeIf { it != shownName }, device.vendor, device.kind, device.mac)
+                if (sub.isNotEmpty()) Text(sub.joinToString(" · "), color = TextMuted, fontSize = 13.sp)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onCopy(device.ipAddress) }, border = BorderStroke(1.dp, Border)) {
+                        Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = TextMain, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp)); Text("Copy IP", color = TextMain)
+                    }
+                    OutlinedButton(onClick = onRescan, enabled = !rescanning, border = BorderStroke(1.dp, Border)) {
+                        if (rescanning) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Accent)
+                        else Icon(Icons.Filled.Refresh, contentDescription = null, tint = TextMain, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp)); Text(if (rescanning) "Rescanning" else "Rescan host", color = TextMain)
+                    }
+                }
+                var nameDraft by rememberSaveable(nickname) { mutableStateOf(nickname ?: "") }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ToolField(nameDraft, { nameDraft = it }, "Nickname (e.g. Dad's laptop)", enabled = true, modifier = Modifier.weight(1f), onGo = { onSetNickname(nameDraft) })
+                    OutlinedButton(onClick = { onSetNickname(nameDraft) }, enabled = nameDraft != (nickname ?: ""), border = BorderStroke(1.dp, Border)) {
+                        Text("Save", color = Accent)
+                    }
+                }
+            }
+        }
+        if (device.openPorts.isNotEmpty()) {
+            item {
+                SurfaceCard {
+                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Eyebrow("OPEN PORTS · ${device.openPorts.size}")
+                        device.openPorts.forEach { port ->
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("${port.port}  ${port.service}", color = TextMain, fontSize = 13.sp)
+                                port.fingerprint?.let { Text(it.display, color = Accent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            val commands = remember(device) { Handoff.forDevice(device) }
+            SurfaceCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Eyebrow("LAPTOP COMMANDS")
+                    Text("Copy-ready for your rig. Sentinel doesn't run these.", color = TextMuted, fontSize = 12.sp)
+                    commands.forEach { cmd ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(cmd.label, color = TextMuted, fontSize = 11.sp)
+                                Text(cmd.command, color = Accent, fontSize = 12.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, lineHeight = 16.sp)
+                            }
+                            IconButton(onClick = { onCopy(cmd.command) }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Filled.ContentCopy, contentDescription = "Copy command", tint = TextMuted, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        item { Eyebrow("ISSUES · $openCount open / ${ordered.size} total") }
+        if (ordered.isEmpty()) {
+            item {
+                SurfaceCard {
+                    Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = Accent, modifier = Modifier.size(30.dp))
+                        Text("No issues flagged on this host.", color = TextMain, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        } else {
+            items(ordered, key = { it.key }) { finding ->
+                WalkthroughFindingCard(
+                    finding = finding,
+                    annotation = annotations[finding.key],
+                    onStatus = { onStatus(finding, it) },
+                    onNotes = { onNotes(finding, it) },
+                    onOpenUrl = onOpenUrl,
+                    onCopy = onCopy
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WalkthroughFindingCard(
+    finding: Finding,
+    annotation: FindingAnnotation?,
+    onStatus: (FindingStatus) -> Unit,
+    onNotes: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onCopy: (String) -> Unit
+) {
+    val status = annotation?.status ?: FindingStatus.NEW
+    val resolved = status == FindingStatus.FIXED || status == FindingStatus.FALSE_POSITIVE
+    val reference = remember(finding) { URL_REGEX.find("${finding.remediation} ${finding.details}")?.value?.trimEnd('.', ')') }
+    var notes by rememberSaveable(finding.key) { mutableStateOf(annotation?.notes ?: "") }
+
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SeverityBadge(finding.severity)
+                Spacer(Modifier.width(8.dp))
+                Text(finding.target, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text(
+                finding.title,
+                color = if (resolved) TextMuted else TextMain,
+                fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 20.sp
+            )
+            Text(finding.details, color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+            Text(finding.remediation.replace(reference.orEmpty(), "").trim().ifBlank { finding.remediation }, color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                FindingStatus.entries.forEach { s ->
+                    val tint = when (s) {
+                        FindingStatus.FIXED -> Accent
+                        FindingStatus.FALSE_POSITIVE -> TextMuted
+                        FindingStatus.VERIFIED -> MediumColor
+                        FindingStatus.NEW -> LowColor
+                    }
+                    FilterChip(
+                        selected = status == s,
+                        onClick = { onStatus(s) },
+                        label = { Text(s.label, fontSize = 12.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            containerColor = SurfaceRaised, labelColor = TextMuted,
+                            selectedContainerColor = tint.copy(alpha = 0.18f), selectedLabelColor = tint
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = status == s, borderColor = Border, selectedBorderColor = tint.copy(alpha = 0.6f))
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it; onNotes(it) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Notes") },
+                placeholder = { Text("Evidence, payload used, follow-up…") },
+                minLines = 1
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (reference != null) {
+                    TextButton(onClick = { onOpenUrl(reference) }, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                        Icon(Icons.Filled.OpenInNew, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp)); Text("Reference", color = Accent, fontSize = 13.sp)
+                    }
+                }
+                TextButton(onClick = { onCopy("${finding.title} — ${finding.target}") }, contentPadding = PaddingValues(horizontal = 6.dp)) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp)); Text("Copy", color = TextMuted, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Tools tab (PortDroid-style utilities)
+
+@Composable
+internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit) {
+    Column(
+        modifier = modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        ScreenHeading("Network tools", "Classic utilities for quick checks in the field.")
+        SpeedTestTool()
+        ExposureTool(onCopy)
+        WifiScanTool()
+        PingTool(onCopy)
+        DnsTool(onCopy)
+        PortScanTool(onCopy)
+        WhoisTool(onCopy)
+        SubdomainTool(onCopy)
+        SubnetTool(onCopy)
+        MacVendorTool(onCopy)
+        WolTool()
+        Text(
+            "Traceroute (hop-by-hop) and SYN/OS-fingerprint scans need raw sockets and aren't possible on an unrooted phone.",
+            color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp
+        )
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun ToolCard(title: String, description: String, content: @Composable ColumnScope.() -> Unit) {
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Eyebrow(title)
+            Text(description, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun ToolOutput(busy: Boolean, output: String?, isError: Boolean, onCopy: ((String) -> Unit)?, mono: Boolean = false, scrollable: Boolean = false) {
+    if (busy) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Accent)
+            Text("Running…", color = TextMuted, fontSize = 13.sp)
+        }
+    } else output?.let { text ->
+        Row(verticalAlignment = Alignment.Top) {
+            val base = Modifier.weight(1f)
+            val mod = if (scrollable) base.heightIn(max = 260.dp).verticalScroll(rememberScrollState()) else base
+            Text(
+                text,
+                modifier = mod,
+                color = if (isError) HighColor else TextMain,
+                fontSize = if (mono) 11.sp else 13.sp,
+                lineHeight = if (mono) 15.sp else 18.sp,
+                fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default
+            )
+            if (!isError && onCopy != null) {
+                IconButton(onClick = { onCopy(text) }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = TextMuted, modifier = Modifier.size(15.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolField(
+    value: String,
+    onChange: (String) -> Unit,
+    label: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    keyboard: KeyboardType = KeyboardType.Text,
+    onGo: (() -> Unit)? = null
+) {
+    val focus = LocalFocusManager.current
+    OutlinedTextField(
+        value = value, onValueChange = onChange, label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it, color = TextMuted) } },
+        singleLine = true, enabled = enabled, modifier = modifier.fillMaxWidth(),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = if (onGo != null) ImeAction.Go else ImeAction.Default, autoCorrectEnabled = false),
+        keyboardActions = KeyboardActions(onGo = { focus.clearFocus(); onGo?.invoke() })
+    )
+}
+
+@Composable
+private fun RunButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    Button(onClick = onClick, enabled = enabled, colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
+        Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text(text, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun PingTool(onCopy: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var host by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    val run = {
+        if (!busy && host.isNotBlank()) {
+            busy = true; out = null
+            scope.launch {
+                NetToolsNet.ping(host.trim())
+                    .onSuccess { r ->
+                        out = "${if (r.reachable) "Reachable" else "No reply"} · ${r.received}/${r.transmitted} received · ${r.lossPercent}% loss" + (r.avgMs?.let { " · avg %.1f ms".format(it) } ?: "")
+                        err = !r.reachable
+                    }
+                    .onFailure { out = it.message; err = true }
+                busy = false
+            }
+        }
+    }
+    ToolCard("PING", "Reachability and round-trip time (uses the system ping).") {
+        ToolField(host, { host = it }, "Host or IP", !busy, placeholder = "example.com or 192.168.1.1", keyboard = KeyboardType.Uri, onGo = run)
+        RunButton("Ping", !busy && host.isNotBlank(), run)
+        ToolOutput(busy, out, err, onCopy)
+    }
+}
+
+@Composable
+private fun DnsTool(onCopy: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var domain by rememberSaveable { mutableStateOf("") }
+    var type by rememberSaveable { mutableStateOf("A") }
+    var busy by remember { mutableStateOf(false) }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    val run = {
+        if (!busy && domain.isNotBlank()) {
+            busy = true; out = null
+            scope.launch {
+                NetToolsNet.dnsLookup(domain.trim(), type)
+                    .onSuccess { answers -> out = answers.joinToString("\n") { "${it.type.padEnd(6)} ${it.value}" }; err = false }
+                    .onFailure { out = it.message; err = true }
+                busy = false
+            }
+        }
+    }
+    ToolCard("DNS LOOKUP", "Query a public resolver (8.8.8.8) for DNS records. ALL queries every common type.") {
+        ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("ALL", "A", "AAAA", "MX", "TXT", "NS", "CNAME", "SOA").forEach { t ->
+                FilterChip(
+                    selected = type == t, onClick = { type = t }, enabled = !busy,
+                    label = { Text(t, fontSize = 12.sp) },
+                    colors = FilterChipDefaults.filterChipColors(containerColor = SurfaceRaised, labelColor = TextMuted, selectedContainerColor = Accent.copy(alpha = 0.18f), selectedLabelColor = Accent),
+                    border = FilterChipDefaults.filterChipBorder(enabled = true, selected = type == t, borderColor = Border, selectedBorderColor = Accent.copy(alpha = 0.6f))
+                )
+            }
+        }
+        RunButton("Look up", !busy && domain.isNotBlank(), run)
+        ToolOutput(busy, out, err, onCopy, mono = true)
+    }
+}
+
+@Composable
+private fun PortScanTool(onCopy: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var host by rememberSaveable { mutableStateOf("") }
+    var ports by rememberSaveable { mutableStateOf("1-1024") }
+    var busy by remember { mutableStateOf(false) }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    val run = {
+        if (!busy && host.isNotBlank()) {
+            busy = true; out = null
+            scope.launch {
+                val list = NetToolsNet.parsePortSpec(ports)
+                NetToolsNet.scanPorts(host.trim(), list)
+                    .onSuccess { open -> out = if (open.isEmpty()) "No open ports in that range." else open.joinToString("\n") { "${it.port.toString().padEnd(6)} ${it.service}" }; err = open.isEmpty() }
+                    .onFailure { out = it.message; err = true }
+                busy = false
+            }
+        }
+    }
+    ToolCard("PORT SCAN", "TCP connect scan of one host. Ranges like 1-1024 or lists like 22,80,443.") {
+        ToolField(host, { host = it }, "Host or IP", !busy, placeholder = "192.168.1.1", keyboard = KeyboardType.Uri)
+        ToolField(ports, { ports = it }, "Ports", !busy, placeholder = "1-1024 or 22,80,443", onGo = run)
+        RunButton("Scan", !busy && host.isNotBlank(), run)
+        ToolOutput(busy, out, err, onCopy, mono = true, scrollable = true)
+    }
+}
+
+@Composable
+private fun WhoisTool(onCopy: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var domain by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    val run = {
+        if (!busy && domain.isNotBlank()) {
+            busy = true; out = null
+            scope.launch {
+                NetToolsNet.whois(domain.trim())
+                    .onSuccess { out = it; err = false }.onFailure { out = it.message; err = true }
+                busy = false
+            }
+        }
+    }
+    ToolCard("WHOIS", "Domain registration details (TCP port 43).") {
+        ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
+        RunButton("Look up", !busy && domain.isNotBlank(), run)
+        ToolOutput(busy, out, err, onCopy, mono = true, scrollable = true)
+    }
+}
+
+@Composable
+private fun SubdomainTool(onCopy: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var domain by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var out by remember { mutableStateOf<String?>(null) }
+    var count by remember { mutableStateOf(0) }
+    var err by remember { mutableStateOf(false) }
+    val run = {
+        if (!busy && domain.isNotBlank()) {
+            busy = true; out = null; count = 0
+            scope.launch {
+                NetToolsNet.subdomains(domain.trim())
+                    .onSuccess { out = it.joinToString("\n"); count = it.size; err = false }
+                    .onFailure { out = it.message; err = true }
+                busy = false
+            }
+        }
+    }
+    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from public Certificate Transparency logs (crt.sh). Read-only — it never touches the target.") {
+        ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
+        RunButton(if (busy) "Searching…" else "Find subdomains", !busy && domain.isNotBlank(), run)
+        if (!busy && !err && count > 0) Text("$count subdomain(s) found", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        ToolOutput(busy, out, err, onCopy, mono = true, scrollable = true)
+    }
+}
+
+@Composable
+private fun SubnetTool(onCopy: (String) -> Unit) {
+    var ip by rememberSaveable { mutableStateOf("") }
+    var prefix by rememberSaveable { mutableStateOf("24") }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    ToolCard("SUBNET CALCULATOR", "Network, broadcast, host range and mask for an IP/prefix.") {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(ip, { ip = it }, label = { Text("IP") }, placeholder = { Text("192.168.1.10", color = TextMuted) }, singleLine = true, modifier = Modifier.weight(2f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false))
+            OutlinedTextField(prefix, { prefix = it }, label = { Text("/") }, placeholder = { Text("24", color = TextMuted) }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+        }
+        RunButton("Calculate", ip.isNotBlank()) {
+            val p = prefix.trim().removePrefix("/").toIntOrNull()
+            val info = p?.let { Subnet.calc(ip.trim(), it) }
+            if (info == null) { out = "Enter a valid IP and prefix (0–32)."; err = true }
+            else {
+                out = "CIDR       ${info.cidr}\nNetmask    ${info.netmask}\nWildcard   ${info.wildcard}\nNetwork    ${info.network}\nBroadcast  ${info.broadcast}\nFirst host ${info.firstHost}\nLast host  ${info.lastHost}\nUsable     ${info.usableHosts}"
+                err = false
+            }
+        }
+        ToolOutput(false, out, err, onCopy, mono = true)
+    }
+}
+
+@Composable
+private fun MacVendorTool(onCopy: (String) -> Unit) {
+    var mac by rememberSaveable { mutableStateOf("") }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    ToolCard("MAC VENDOR", "Identify a manufacturer from a MAC address (OUI prefix).") {
+        ToolField(mac, { mac = it }, "MAC address", true, placeholder = "aa:bb:cc:dd:ee:ff")
+        RunButton("Look up", mac.isNotBlank()) {
+            val norm = Oui.normalize(mac)
+            if (norm == null) { out = "That isn't a valid MAC address."; err = true }
+            else { val v = Oui.vendor(norm); out = "$norm\n${v ?: "Unknown vendor"}"; err = false }
+        }
+        ToolOutput(false, out, err, onCopy, mono = true)
+    }
+}
+
+@Composable
+private fun WolTool() {
+    val scope = rememberCoroutineScope()
+    var mac by rememberSaveable { mutableStateOf("") }
+    var bcast by rememberSaveable { mutableStateOf("255.255.255.255") }
+    var busy by remember { mutableStateOf(false) }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    ToolCard("WAKE-ON-LAN", "Send a magic packet to power on a device by MAC.") {
+        ToolField(mac, { mac = it }, "Target MAC", !busy, placeholder = "aa:bb:cc:dd:ee:ff")
+        ToolField(bcast, { bcast = it }, "Broadcast address", !busy, keyboard = KeyboardType.Uri)
+        RunButton("Send", !busy && mac.isNotBlank()) {
+            busy = true; out = null
+            scope.launch {
+                NetToolsNet.wakeOnLan(mac.trim(), bcast.trim())
+                    .onSuccess { out = "Magic packet sent to $mac."; err = false }
+                    .onFailure { out = it.message; err = true }
+                busy = false
+            }
+        }
+        ToolOutput(busy, out, err, null)
+    }
+}
+
+@Composable
+private fun SpeedTestTool() {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var progress by remember { mutableStateOf<String?>(null) }
+    var out by remember { mutableStateOf<String?>(null) }
+    var err by remember { mutableStateOf(false) }
+    ToolCard("INTERNET SPEED", "Measures your phone's download speed and latency (via Cloudflare).") {
+        RunButton(if (busy) "Testing…" else "Run speed test", !busy) {
+            busy = true; out = null; progress = "Starting…"
+            scope.launch {
+                SpeedTest.run(onProgress = { bytes, ms -> if (ms > 0) progress = "${bytes / 1_000_000} MB · ${SpeedCalc.format(SpeedCalc.mbps(bytes, ms))}" })
+                    .onSuccess {
+                        out = "Download  ${SpeedCalc.format(it.downloadMbps)}\nLatency   ${if (it.latencyMs >= 0) "${it.latencyMs} ms" else "n/a"}\nData      ${it.bytes / 1_000_000} MB in ${"%.1f".format(it.millis / 1000.0)} s"
+                        err = false
+                    }
+                    .onFailure { out = it.message; err = true }
+                busy = false; progress = null
+            }
+        }
+        if (busy) Text(progress ?: "Running…", color = TextMuted, fontSize = 13.sp)
+        ToolOutput(false, out, err, null, mono = true)
+    }
+}
+
+@Composable
+private fun ExposureTool(onCopy: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<NetToolsNet.ExposureResult?>(null) }
+    var err by remember { mutableStateOf<String?>(null) }
+    ToolCard("PUBLIC IP & EXPOSURE", "Shows your internet-facing IP, ISP/ASN and whether common inbound ports answer from outside.") {
+        RunButton(if (busy) "Checking…" else "Check my exposure", !busy) {
+            busy = true; result = null; err = null
+            scope.launch {
+                NetToolsNet.publicExposure()
+                    .onSuccess { result = it }
+                    .onFailure { err = it.message }
+                busy = false
+            }
+        }
+        if (busy) Text("Looking up your public IP…", color = TextMuted, fontSize = 13.sp)
+        err?.let { Text(it, color = HighColor, fontSize = 13.sp, lineHeight = 18.sp) }
+        result?.let { r ->
+            val info = r.info
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(info.ip, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Tag(info.kind.label)
+                }
+                listOfNotNull(info.isp, info.asn, info.location).takeIf { it.isNotEmpty() }?.let {
+                    Text(it.joinToString(" · "), color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                }
+                Text(IpExposure.verdict(info.kind), color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                if (info.kind == IpExposure.IpKind.PUBLIC) {
+                    HorizontalDivider(color = Border)
+                    if (r.reachable.isEmpty()) {
+                        Text("No common inbound ports answered — good. (Best-effort from this device; a check from an outside network is more definitive.)",
+                            color = LowColor, fontSize = 12.sp, lineHeight = 16.sp)
+                    } else {
+                        Text("Reachable inbound: ${r.reachable.joinToString(", ")}", color = HighColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text("These ports accepted a connection. If you didn't intend to expose them, close the port-forward or firewall them.",
+                            color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                }
+                TextButton(onClick = { onCopy(info.ip) }, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = TextMuted, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp)); Text("Copy IP", color = TextMuted, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WifiScanTool() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var aps by remember { mutableStateOf<List<WifiAp>?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    var hasPerm by remember { mutableStateOf(WifiScanNet.hasPermission(context)) }
+
+    val permLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasPerm = granted
+        if (!granted) note = "Location permission is required by Android to list Wi-Fi networks."
+    }
+
+    ToolCard("NEARBY WI-FI", "Lists access points in range with channel, signal and security.") {
+        if (!hasPerm) {
+            Text("Android requires location permission to read Wi-Fi scans. Nothing about your location leaves the phone.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+            RunButton("Grant permission", true) { permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
+        } else {
+            RunButton(if (busy) "Scanning…" else "Scan Wi-Fi", !busy) {
+                busy = true; note = null
+                scope.launch {
+                    val results = withContext(Dispatchers.IO) { WifiScanNet.scan(context) }
+                    aps = results
+                    if (results.isEmpty()) note = "No results. Make sure Wi-Fi and location are on; Android throttles repeat scans."
+                    busy = false
+                }
+            }
+        }
+        note?.let { Text(it, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp) }
+        aps?.forEach { ap ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(ap.ssid, color = TextMain, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("ch ${ap.channel} · ${ap.band} · ${ap.security}${ap.vendor?.let { " · $it" } ?: ""}", color = TextMuted, fontSize = 11.sp)
+                }
+                Text(
+                    "${ap.signalPercent}%",
+                    color = if (WifiInfoUtil.isWeak(ap.security)) MediumColor else Accent,
+                    fontSize = 13.sp, fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Settings
+
+@Composable
+internal fun SettingsScreen(
+    modifier: Modifier,
+    themeLight: Boolean,
+    onThemeChange: (Boolean) -> Unit,
+    vulnDb: VulnDbStatus,
+    onUpdateDb: () -> Unit,
+    feedUrl: String,
+    onFeedUrl: (String) -> Unit,
+    onResetFeed: () -> Unit,
+    appUpdate: AppUpdateStatus,
+    onCheckUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
+    scanSchedule: ScanSchedule,
+    onScheduleChange: (ScanSchedule) -> Unit,
+    historyCount: Int,
+    onOpenHistory: () -> Unit,
+    onBack: () -> Unit,
+    onCopy: (String) -> Unit,
+    onOpenUrl: (String) -> Unit
+) {
+    var feedDraft by rememberSaveable(feedUrl) { mutableStateOf(feedUrl) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Accent, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Back", color = Accent)
+                }
+                Text("Settings", color = TextMain, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        // ---- Appearance ----
+        item {
+            SettingsCard(Icons.Filled.Palette, "APPEARANCE", "Theme") {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(if (themeLight) "Light & Crisp" else "Cyber Contrast", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(if (themeLight) "Bright light mode for daytime use." else "True-black OLED with cyan + magenta.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                    Switch(
+                        checked = themeLight,
+                        onCheckedChange = onThemeChange,
+                        colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent)
+                    )
+                }
+            }
+        }
+
+        // ---- Scheduled scans ----
+        item {
+            SettingsCard(Icons.Filled.Schedule, "AUTOMATIC SCANS", "Schedule") {
+                Text("Run a full scan of your authorized network on a schedule and get a notification when it finishes.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ScanSchedule.entries.forEach { opt ->
+                        FilterChip(
+                            selected = scanSchedule == opt, onClick = { onScheduleChange(opt) },
+                            label = { Text(opt.label, fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(containerColor = SurfaceRaised, labelColor = TextMuted, selectedContainerColor = Accent.copy(alpha = 0.18f), selectedLabelColor = Accent),
+                            border = FilterChipDefaults.filterChipBorder(enabled = true, selected = scanSchedule == opt, borderColor = Border, selectedBorderColor = Accent.copy(alpha = 0.6f))
+                        )
+                    }
+                }
+                Text("Scans only run when the phone is back on the authorized network. Turn on Alerts (Home) to be notified.", color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+            }
+        }
+
+        // ---- Scan history ----
+        item {
+            SurfaceCard(onClick = onOpenHistory) {
+                Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(Icons.Filled.History, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Eyebrow("HISTORY")
+                        Text("Scan history & trends", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text(if (historyCount == 0) "No scans recorded yet." else "$historyCount saved scan(s) — tap to view and compare.", color = TextMuted, fontSize = 12.sp)
+                    }
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                }
+            }
+        }
+
+        // ---- Exploit database ----
+        item {
+            SettingsCard(Icons.Filled.Shield, "EXPLOIT DATABASE", "Known-exploit feed") {
+                val line = if (vulnDb.count == 0) "No entries yet — tap Update."
+                else "${vulnDb.count} CVEs · updated ${vulnDb.updated} · ${vulnDb.source.substringAfterLast('/').ifBlank { vulnDb.source }}"
+                Text(line, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                vulnDb.message?.let { Text(it, color = if (vulnDb.isError) HighColor else Accent, fontSize = 11.sp, lineHeight = 15.sp) }
+                OutlinedButton(onClick = onUpdateDb, enabled = !vulnDb.updating, border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                    if (vulnDb.updating) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Accent)
+                    else Icon(Icons.Filled.Refresh, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (vulnDb.updating) "Updating…" else "Update now", color = Accent)
+                }
+                HorizontalDivider(color = Border)
+                Text("FEED SOURCE", color = TextMain, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                Text("Pulls a JSON feed published by your GitHub project. Leave as-is unless you host your own.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                ToolField(feedDraft, { feedDraft = it }, "Feed URL", enabled = true, keyboard = KeyboardType.Uri)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onFeedUrl(feedDraft) }, enabled = feedDraft.isNotBlank() && feedDraft != feedUrl, border = BorderStroke(1.dp, Border)) {
+                        Text("Save", color = Accent)
+                    }
+                    TextButton(onClick = { onResetFeed(); feedDraft = VulnFeed.DEFAULT_FEED_URL }) {
+                        Text("Reset to default", color = TextMuted)
+                    }
+                }
+            }
+        }
+
+        // ---- App version ----
+        item {
+            SettingsCard(Icons.Filled.SystemUpdate, "APP VERSION", "Updates") {
+                Text("Installed: v${appUpdate.currentVersion}", color = TextMuted, fontSize = 12.sp)
+                appUpdate.message?.let { Text(it, color = if (appUpdate.isError) HighColor else Accent, fontSize = 12.sp, lineHeight = 16.sp) }
+                if (appUpdate.available && appUpdate.notes.isNotBlank()) {
+                    Text(appUpdate.notes.take(400), color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 8, overflow = TextOverflow.Ellipsis)
+                }
+                if (appUpdate.available) {
+                    PrimaryButton(
+                        text = if (appUpdate.installing) "Downloading…" else "Download & install v${appUpdate.latestVersion}",
+                        icon = Icons.Filled.SystemUpdate,
+                        enabled = !appUpdate.installing,
+                        onClick = onInstallUpdate,
+                        busy = appUpdate.installing
+                    )
+                } else {
+                    OutlinedButton(onClick = onCheckUpdate, enabled = !appUpdate.checking, border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                        if (appUpdate.checking) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Accent)
+                        else Icon(Icons.Filled.Refresh, contentDescription = null, tint = Accent, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (appUpdate.checking) "Checking…" else "Check for updates", color = Accent)
+                    }
+                }
+                TextButton(onClick = { onOpenUrl("https://github.com/${AppUpdateLogic.OWNER}/${AppUpdateLogic.REPO}") }, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.Filled.OpenInNew, contentDescription = null, tint = TextMuted, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("View project on GitHub", color = TextMuted, fontSize = 13.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsCard(icon: ImageVector, eyebrow: String, title: String, content: @Composable ColumnScope.() -> Unit) {
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Eyebrow(eyebrow)
+                    Text(title, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                }
+            }
+            content()
+        }
+    }
+}
+
+// ---------------------------------------------------------------- Scan history
+
+@Composable
+internal fun HistoryScreen(
+    modifier: Modifier,
+    entries: List<HistoryEntry>,
+    onClear: () -> Unit,
+    onBack: () -> Unit
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onBack, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Accent, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Settings", color = Accent)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Scan history", color = TextMain, fontSize = 25.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    if (entries.isNotEmpty()) {
+                        TextButton(onClick = onClear) { Text("Clear", color = TextMuted) }
+                    }
+                }
+            }
+        }
+        if (entries.isEmpty()) {
+            item {
+                Text("No scans recorded yet. Run a network scan or website audit and it'll appear here.",
+                    color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+        }
+        items(entries.size) { i ->
+            val e = entries[i]
+            val diff = ScanHistoryCodec.diffAgainstPrevious(entries, e)
+            SurfaceCard {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(e.label, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(DateUtils.getRelativeTimeSpanString(e.at).toString(), color = TextMuted, fontSize = 11.sp)
+                    }
+                    val meta = buildList {
+                        add(if (e.type == FindingSource.NETWORK) "Network" else "Website")
+                        if (e.type == FindingSource.NETWORK) add("${e.deviceCount} device(s)")
+                    }
+                    Text(meta.joinToString(" · "), color = TextMuted, fontSize = 12.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(Severity.HIGH, Severity.MEDIUM, Severity.LOW).forEach { sev ->
+                            val n = e.count(sev)
+                            if (n > 0) HistoryCountPill(n, sev.label, sev.color())
+                        }
+                        if (e.issueCount == 0) HistoryCountPill(0, "No issues", LowColor)
+                    }
+                    if (diff != null && !diff.isEmpty) {
+                        HorizontalDivider(color = Border)
+                        Text("SINCE PREVIOUS SCAN", color = TextMain, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
+                        ScanDiffer.summaryLines(diff).take(6).forEach {
+                            Text("• $it", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryCountPill(count: Int, label: String, color: Color) {
+    Box(Modifier.background(color.copy(alpha = 0.15f), RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+        Text(if (count > 0) "$count $label" else label, color = color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    }
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lets the Wear OS app find the phone running Sentinel. tools:keep stops resource shrinking from removing it. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@array/android_wear_capabilities">
+    <string-array name="android_wear_capabilities" translatable="false">
+        <item>sentinel_phone</item>
+    </string-array>
+</resources>

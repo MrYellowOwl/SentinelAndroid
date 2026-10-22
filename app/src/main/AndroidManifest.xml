@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Website audits and LAN connection checks. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Detect the current Wi-Fi/Ethernet network and its address range. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Optional scan alerts (asked only when the user turns alerts on). Watches mirror these. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Receive multicast replies (mDNS/SSDP) so the scan can name and classify LAN devices. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Read Wi-Fi scan results for the optional nearby-networks tool. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Ask the system for a fresh Wi-Fi scan (startScan) in the nearby-networks tool. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- Android requires location permission to return Wi-Fi scan results (asked only when you use that tool). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
+    <!-- Install the downloaded APK when the user taps "Update" (in-app updater). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application
+        android:name=".SentinelApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Sentinel"
+        android:usesCleartextTraffic="true"
+        tools:targetApi="31">
+        <!-- Cleartext is required so the website audit can test whether plain http:// redirects to HTTPS. -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- "Scan again" action on scan notifications. -->
+        <receiver
+            android:name=".ScanActionReceiver"
+            android:exported="false" />
+
+        <!-- Commands from the Sentinel Wear OS app (only apps with the same package and signing key can send these). -->
+        <service
+            android:name=".WatchCommandService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data
+                    android:host="*"
+                    android:pathPrefix="/sentinel"
+                    android:scheme="wear" />
+            </intent-filter>
+        </service>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>
