@@ -24,6 +24,7 @@ concurrency:
 jobs:
   build-feed:
     runs-on: ubuntu-latest
+    timeout-minutes: 20          # never let a throttled NVD pull hang the job
     steps:
       - uses: actions/checkout@v4
 

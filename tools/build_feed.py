@@ -47,7 +47,7 @@ def fetch(url, headers=None, retries=3):
         except urllib.error.HTTPError as e:
             last = e
             if e.code in (403, 429, 503, 504) and attempt < retries - 1:
-                time.sleep(8 * (attempt + 1))  # NVD asks unauthenticated clients to slow down
+                time.sleep(6)  # NVD asks unauthenticated clients to slow down; keep it bounded
                 continue
             raise
         except Exception as e:  # noqa: BLE001 - transient network errors get one more try
