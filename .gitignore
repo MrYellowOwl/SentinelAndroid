@@ -14,3 +14,7 @@
 keystore.properties
 *.jks
 *.keystore
+
+# Private maintainer/operational notes and Play Store listing copy (not for the public repo)
+MAINTAINING.md
+docs/STORE_LISTING.md
