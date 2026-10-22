@@ -64,6 +64,14 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            // org.json (and other bundled android.jar classes) otherwise throw "not mocked" in JVM
+            // unit tests; a real org.json is added below and stray stubs return defaults.
+            isReturnDefaultValues = true
+        }
+    }
+
     dependenciesInfo {
         // Google Play reads this; other stores (F-Droid) prefer it off. Keep on for Play.
         includeInApk = true
@@ -95,4 +103,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
+    // Real org.json for JVM unit tests (android.jar's copy is a throwing stub).
+    testImplementation("org.json:json:20231013")
 }
