@@ -45,9 +45,13 @@ def cve_in(text):
     return m.group(0).upper() if m else None
 
 
+# Some gov/API WAFs reject non-browser agents, so use a browser-like UA for KEV/EPSS.
+BROWSER_UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) SentinelFeedBuilder/1.0"}
+
+
 def cisa_kev_set():
     """CVE ids in CISA's Known Exploited Vulnerabilities catalog (actively exploited)."""
-    data = json.loads(fetch(KEV_JSON).decode("utf-8", "replace"))
+    data = json.loads(fetch(KEV_JSON, headers=BROWSER_UA).decode("utf-8", "replace"))
     return {v.get("cveID", "").upper() for v in data.get("vulnerabilities", []) if v.get("cveID")}
 
 
@@ -55,11 +59,11 @@ def epss_scores(cve_ids):
     """EPSS probability per CVE, batched against the FIRST API. Missing ids just get no score."""
     out = {}
     ids = [c for c in cve_ids if c]
-    for i in range(0, len(ids), 100):
-        batch = ids[i:i + 100]
+    for i in range(0, len(ids), 50):
+        batch = ids[i:i + 50]
         url = f"{EPSS_API}?cve={','.join(batch)}"
         try:
-            payload = json.loads(fetch(url).decode("utf-8", "replace"))
+            payload = json.loads(fetch(url, headers=BROWSER_UA).decode("utf-8", "replace"))
             for row in payload.get("data", []):
                 cve, score = row.get("cve", "").upper(), row.get("epss")
                 if cve and score is not None:
