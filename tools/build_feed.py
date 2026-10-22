@@ -15,7 +15,7 @@ Usage:
 
 Products matched to Sentinel's fingerprints. Extend PRODUCTS as you add fingerprinters.
 """
-import argparse, csv, io, json, os, sys, time, urllib.request
+import argparse, csv, io, json, os, sys, time, urllib.error, urllib.request
 
 # NVD CPE vendor:product -> Sentinel product key (must match ServiceFingerprint.productKey / VulnMatcher.normalize)
 PRODUCTS = {
@@ -36,10 +36,27 @@ NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 EDB_CSV = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv"
 
 
-def fetch(url, headers=None):
-    req = urllib.request.Request(url, headers=headers or {"User-Agent": "sentinel-feed-builder"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return r.read()
+def fetch(url, headers=None, retries=3):
+    """GET with simple backoff on the throttling/transient statuses NVD and gitlab return."""
+    last = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=headers or {"User-Agent": "sentinel-feed-builder"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.read()
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code in (403, 429, 503, 504) and attempt < retries - 1:
+                time.sleep(8 * (attempt + 1))  # NVD asks unauthenticated clients to slow down
+                continue
+            raise
+        except Exception as e:  # noqa: BLE001 - transient network errors get one more try
+            last = e
+            if attempt < retries - 1:
+                time.sleep(4 * (attempt + 1))
+                continue
+            raise
+    raise last if last else RuntimeError("fetch failed")
 
 
 def exploitdb_cve_set():
@@ -126,10 +143,17 @@ def main():
     print(f"Manual entries: {len(manual)}", file=sys.stderr)
 
     vulns = []
+    # Exploit-DB index is best-effort: if it's unreachable, entries just miss the "exploit" flag.
+    edb = set()
     try:
         print("Fetching Exploit-DB index…", file=sys.stderr)
         edb = exploitdb_cve_set()
-        for (vendor, product), key in PRODUCTS.items():
+    except Exception as e:
+        print(f"WARNING: Exploit-DB index unavailable ({e}); exploit flags default to false.", file=sys.stderr)
+
+    # Per-product so one product throttling/erroring doesn't zero out the whole auto-pull.
+    for (vendor, product), key in PRODUCTS.items():
+        try:
             print(f"NVD: {vendor}:{product} -> {key}", file=sys.stderr)
             for item in nvd_entries(vendor, product, args.nvd_key):
                 cve = item["cve"]
@@ -148,9 +172,8 @@ def main():
                     "summary": desc[:300],
                     "url": f"https://nvd.nist.gov/vuln/detail/{cid}",
                 })
-    except Exception as e:
-        # A public-source outage shouldn't wipe the feed: keep going with manual entries only.
-        print(f"WARNING: auto-pull failed ({e}); publishing manual entries only.", file=sys.stderr)
+        except Exception as e:
+            print(f"WARNING: NVD fetch for {vendor}:{product} failed ({e}); skipping it this run.", file=sys.stderr)
 
     # Merge: manual entries first and authoritative, then auto entries that aren't duplicates.
     merged, seen = [], set()
