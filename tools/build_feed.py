@@ -167,6 +167,46 @@ def load_manual(path):
     return [e for e in entries if e.get("id") and e.get("product")]
 
 
+def enrich_kev_epss(entries):
+    """Tag entries in place with CISA KEV + EPSS. Both best-effort; fast (no NVD)."""
+    kev = set()
+    try:
+        print("Fetching CISA KEV catalog…", file=sys.stderr)
+        kev = cisa_kev_set()
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: KEV catalog unavailable ({e}); kev flags omitted.", file=sys.stderr)
+    epss = {}
+    try:
+        print("Fetching EPSS scores…", file=sys.stderr)
+        epss = epss_scores({cve_in(v.get("id", "")) for v in entries})
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: EPSS unavailable ({e}); scores omitted.", file=sys.stderr)
+    kev_count = 0
+    for v in entries:
+        cid = cve_in(v.get("id", ""))
+        if cid and cid in kev:
+            v["kev"] = True
+            kev_count += 1
+        if cid and cid in epss:
+            v["epss"] = epss[cid]
+    print(f"Tagged {kev_count} KEV and {sum(1 for v in entries if 'epss' in v)} EPSS entries.", file=sys.stderr)
+    return kev_count
+
+
+def enrich_only(path):
+    """Load an existing feed, add KEV/EPSS, write it back. Decoupled from the slow NVD pull."""
+    with open(path) as f:
+        feed = json.load(f)
+    entries = feed.get("vulns", [])
+    enrich_kev_epss(entries)
+    kev = sum(1 for v in entries if v.get("kev"))
+    eps = sum(1 for v in entries if "epss" in v)
+    feed["note"] = (feed.get("note", "").split(" · ")[0]) + f" · {kev} KEV, {eps} EPSS-scored."
+    with open(path, "w") as f:
+        json.dump(feed, f, separators=(",", ":"))
+    print(f"Enriched {path}: {kev} KEV, {eps} EPSS.", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="vuln_feed.json")
@@ -174,7 +214,13 @@ def main():
     ap.add_argument("--nvd-key", default=None)
     ap.add_argument("--min-entries", type=int, default=1,
                     help="fail (non-zero exit, no write) if the result has fewer than this many entries")
+    ap.add_argument("--enrich-only", default=None,
+                    help="skip the NVD pull; just add KEV/EPSS to an existing feed JSON and rewrite it")
     args = ap.parse_args()
+
+    if args.enrich_only:
+        enrich_only(args.enrich_only)
+        return
 
     manual = load_manual(args.merge)
     print(f"Manual entries: {len(manual)}", file=sys.stderr)
@@ -221,28 +267,7 @@ def main():
         seen.add(k)
         merged.append(v)
 
-    # Enrich with CISA KEV (actively exploited) and EPSS (exploitation likelihood). Both best-effort.
-    kev = set()
-    try:
-        print("Fetching CISA KEV catalog…", file=sys.stderr)
-        kev = cisa_kev_set()
-    except Exception as e:  # noqa: BLE001
-        print(f"WARNING: KEV catalog unavailable ({e}); kev flags omitted.", file=sys.stderr)
-    epss = {}
-    try:
-        print("Fetching EPSS scores…", file=sys.stderr)
-        epss = epss_scores({cve_in(v.get("id", "")) for v in merged})
-    except Exception as e:  # noqa: BLE001
-        print(f"WARNING: EPSS unavailable ({e}); scores omitted.", file=sys.stderr)
-    kev_count = 0
-    for v in merged:
-        cid = cve_in(v.get("id", ""))
-        if cid and cid in kev:
-            v["kev"] = True
-            kev_count += 1
-        if cid and cid in epss:
-            v["epss"] = epss[cid]
-    print(f"Tagged {kev_count} KEV and {sum(1 for v in merged if 'epss' in v)} EPSS entries.", file=sys.stderr)
+    enrich_kev_epss(merged)
 
     if len(merged) < args.min_entries:
         print(f"ERROR: only {len(merged)} entries (< {args.min_entries}); refusing to publish.", file=sys.stderr)

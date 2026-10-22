@@ -1,0 +1,43 @@
+name: Enrich feed (KEV + EPSS)
+
+# Fast, decoupled from the slow NVD pull: reads the published feed and adds CISA KEV +
+# EPSS tags, then commits. Runs after the feed workflow finishes, on a schedule, and on demand.
+
+on:
+  workflow_run:
+    workflows: ["Update exploit feed"]
+    types: [completed]
+  schedule:
+    - cron: "47 7 * * *"        # daily, after the feed refresh
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feed-enrich
+  cancel-in-progress: true
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Add KEV + EPSS to the published feed
+        run: python3 tools/build_feed.py --enrich-only feed/vuln_feed.json
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- feed/vuln_feed.json; then
+            echo "No enrichment changes."; exit 0
+          fi
+          git config user.name  "sentinel-feed-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add feed/vuln_feed.json
+          git commit -m "chore(feed): KEV/EPSS enrichment [skip ci]"
+          git push
