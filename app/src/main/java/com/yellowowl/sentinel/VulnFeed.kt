@@ -97,6 +97,7 @@ object VulnFeed {
                     range = VersionRange(
                         introduced = item.optString("introduced").ifBlank { null },
                         fixed = item.optString("fixed").ifBlank { null },
+                        lastAffected = item.optString("last_affected").ifBlank { null },
                         exact = exact
                     ),
                     cvss = if (item.has("cvss")) item.optDouble("cvss").takeIf { !it.isNaN() } else null,

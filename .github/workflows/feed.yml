@@ -24,7 +24,7 @@ concurrency:
 jobs:
   build-feed:
     runs-on: ubuntu-latest
-    timeout-minutes: 20          # never let a throttled NVD pull hang the job
+    timeout-minutes: 40          # full-history pull across many products; never let a throttled NVD hang it
     steps:
       - uses: actions/checkout@v4
 
@@ -42,14 +42,21 @@ jobs:
             --min-entries 1 \
             ${NVD_API_KEY:+--nvd-key "$NVD_API_KEY"}
 
+      - name: Bake the feed in as the app's offline seed
+        # The seed ships inside the APK so a fresh install has the full DB with no network.
+        # aapt stores res/raw/*.json DEFLATE-compressed, so the APK only grows by the compressed size.
+        run: |
+          cp feed/vuln_feed.json app/src/main/res/raw/vuln_seed.json
+          echo "Seed entries: $(python3 -c "import json;print(len(json.load(open('app/src/main/res/raw/vuln_seed.json'))['vulns']))")"
+
       - name: Commit if the feed changed
         run: |
-          if git diff --quiet -- feed/vuln_feed.json; then
+          if git diff --quiet -- feed/vuln_feed.json app/src/main/res/raw/vuln_seed.json; then
             echo "No feed changes."
             exit 0
           fi
           git config user.name  "sentinel-feed-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add feed/vuln_feed.json
-          git commit -m "chore(feed): refresh vuln_feed.json [skip ci]"
+          git add feed/vuln_feed.json app/src/main/res/raw/vuln_seed.json
+          git commit -m "chore(feed): refresh vuln DB + baked seed [skip ci]"
           git push

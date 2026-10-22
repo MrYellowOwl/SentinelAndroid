@@ -17,20 +17,51 @@ Products matched to Sentinel's fingerprints. Extend PRODUCTS as you add fingerpr
 """
 import argparse, csv, io, json, os, re, sys, time, urllib.error, urllib.request
 
-# NVD CPE vendor:product -> Sentinel product key (must match ServiceFingerprint.productKey / VulnMatcher.normalize)
+# NVD CPE vendor:product -> Sentinel product key (must match ServiceFingerprint.productKey / VulnMatcher.normalize).
+# A CVE only ever matches on-device if its product key equals what a fingerprinter emits for that service, so
+# this list is scoped to daemons Sentinel can identify from a banner/handshake (plus close future candidates).
+# NVD vendor/product names that don't exist just return nothing and are skipped — a wrong guess is harmless.
 PRODUCTS = {
+    # SSH
     ("openbsd", "openssh"): "openssh",
+    ("dropbear_ssh_project", "dropbear_ssh"): "dropbear",
+    ("matt_johnston", "dropbear"): "dropbear",
+    # Web servers
     ("apache", "http_server"): "apache_httpd",
     ("f5", "nginx"): "nginx",
     ("nginx", "nginx"): "nginx",
+    ("lighttpd", "lighttpd"): "lighttpd",
+    ("apache", "tomcat"): "tomcat",
+    ("eclipse", "jetty"): "jetty",
+    ("microsoft", "internet_information_services"): "microsoft_iis",
+    # FTP
     ("vsftpd_project", "vsftpd"): "vsftpd",
     ("proftpd", "proftpd"): "proftpd",
+    ("pureftpd", "pure-ftpd"): "pure-ftpd",
+    ("filezilla", "filezilla_server"): "filezilla",
+    # Mail
+    ("exim", "exim"): "exim",
+    ("postfix", "postfix"): "postfix",
+    ("proofpoint", "sendmail"): "sendmail",
+    ("sendmail", "sendmail"): "sendmail",
+    ("dovecot", "dovecot"): "dovecot",
+    # Databases / caches
     ("redis", "redis"): "redis",
+    ("redislabs", "redis"): "redis",
     ("mysql", "mysql"): "mysql",
+    ("oracle", "mysql"): "mysql",
     ("mariadb", "mariadb"): "mariadb",
-    ("php", "php"): "php",
+    ("postgresql", "postgresql"): "postgresql",
+    ("mongodb", "mongodb"): "mongodb",
+    ("memcached", "memcached"): "memcached",
+    ("elastic", "elasticsearch"): "elasticsearch",
+    # DNS
     ("isc", "bind"): "bind",
-    ("microsoft", "internet_information_services"): "microsoft_iis",
+    ("nlnetlabs", "unbound"): "unbound",
+    # File sharing
+    ("samba", "samba"): "samba",
+    # Runtimes
+    ("php", "php"): "php",
 }
 NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 EDB_CSV = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv"
@@ -133,17 +164,41 @@ def best_cvss(metrics):
 
 
 def version_bounds(cve, product_key):
-    """Extract (introduced, fixed) from CPE match ranges for this product."""
+    """Collect affected-version info from this product's CPE matches.
+
+    NVD gives upper bounds two ways, so we keep both: versionEndExcluding ("fixed in", exclusive) and
+    versionEndIncluding ("affected up to and including", inclusive). CPEs that pin a concrete version
+    (no range attrs) contribute to an `exact` list. Returns (introduced, fixed, last_affected, exact[]).
+    """
+    prod = product_key.split("_")[0]
+    intro = fixed = last = None
+    exacts = []
     for conf in cve.get("configurations", []):
         for node in conf.get("nodes", []):
             for m in node.get("cpeMatch", []):
+                if m.get("vulnerable") is False:
+                    continue
                 c = m.get("criteria", "")
-                if f":{product_key.split('_')[0]}:" in c or product_key in c:
-                    intro = m.get("versionStartIncluding")
-                    fixed = m.get("versionEndExcluding")
-                    if intro or fixed:
-                        return intro, fixed
-    return None, None
+                if f":{prod}:" not in c and product_key not in c:
+                    continue
+                si = m.get("versionStartIncluding")
+                se = m.get("versionStartExcluding")  # rare; treated as ~inclusive lower (slight over-match)
+                ee = m.get("versionEndExcluding")
+                ei = m.get("versionEndIncluding")
+                if si or se or ee or ei:
+                    if intro is None:
+                        intro = si or se
+                    if fixed is None and ee:
+                        fixed = ee
+                    if last is None and ei:
+                        last = ei
+                else:
+                    # e.g. cpe:2.3:a:apache:http_server:2.4.49:*:*:... -> version is field index 5
+                    parts = c.split(":")
+                    if len(parts) > 5 and parts[5] not in ("*", "-", ""):
+                        if parts[5] not in exacts:
+                            exacts.append(parts[5])
+    return intro, fixed, last, exacts[:40]  # cap exacts so a sprawling CVE can't bloat the feed
 
 
 def dedupe_key(v):
@@ -153,6 +208,7 @@ def dedupe_key(v):
         v.get("product", "").strip().lower(),
         v.get("introduced", ""),
         v.get("fixed", ""),
+        v.get("last_affected", ""),
         ",".join(v.get("exact", []) or []),
     )
 
@@ -241,8 +297,10 @@ def main():
             for item in nvd_entries(vendor, product, args.nvd_key):
                 cve = item["cve"]
                 cid = cve["id"]
-                intro, fixed = version_bounds(cve, key)
-                if not (intro or fixed):
+                intro, fixed, last, exacts = version_bounds(cve, key)
+                # Keep a CVE only when we have something to match a version against — a range bound or
+                # concrete versions. Entries with no bound at all would match every version (false positives).
+                if not (intro or fixed or last or exacts):
                     continue
                 desc = next((d["value"] for d in cve.get("descriptions", []) if d["lang"] == "en"), "")
                 vulns.append({
@@ -250,6 +308,8 @@ def main():
                     "product": key,
                     **({"introduced": intro} if intro else {}),
                     **({"fixed": fixed} if fixed else {}),
+                    **({"last_affected": last} if last else {}),
+                    **({"exact": exacts} if exacts else {}),
                     "cvss": best_cvss(cve.get("metrics", {})),
                     "exploit": cid in edb,
                     "summary": desc[:300],

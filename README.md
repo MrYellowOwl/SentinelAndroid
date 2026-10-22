@@ -23,7 +23,7 @@ Kotlin · Jetpack Compose · Android 8.0+ (API 26) · targets API 36.
 - Optional WordPress audit: version, user enumeration, XML-RPC, plugin/theme inventory with CVE matching, exposed-file checks.
 
 **Prioritization & intelligence**
-- Vulnerability matching against a live feed with **CISA KEV** (actively-exploited) flags, **EPSS** exploitation-likelihood scores, and end-of-life software detection.
+- Vulnerability matching against a database that ships inside the app (works offline) and auto-updates, covering the full CVE history of the services Sentinel fingerprints, with **CISA KEV** (actively-exploited) flags, **EPSS** exploitation-likelihood scores, and end-of-life software detection.
 - Optional external intel (bring-your-own API key): Shodan host exposure and VirusTotal reputation.
 
 **Tools**
@@ -81,6 +81,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 ---
 
 ## Changelog
+
+**1.14.0** — Much larger, fully-offline CVE database. The vulnerability feed now pulls the complete CVE history for every service Sentinel fingerprints (SSH, web, FTP, mail, database and DNS daemons) instead of a recent slice, with far better version-range extraction (inclusive/exclusive bounds and pinned versions), and the whole database is baked into the app so a fresh install matches CVEs with no network. The in-app Update still refreshes it between releases.
 
 **1.13.2** — Website-audit accuracy: TLS certificate strength checks (broken/weak signature algorithms, undersized RSA/EC keys, self-signed certs) and a soft-404 guard that suppresses false positives on servers that answer 200 for every path.
 

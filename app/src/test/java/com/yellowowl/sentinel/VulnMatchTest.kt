@@ -51,6 +51,31 @@ class VulnMatchTest {
     }
 
     @Test
+    fun lastAffectedIsInclusiveUpperBound() {
+        // "affected up to and including 9.16.1" — unlike fixed, the bound version itself IS vulnerable.
+        val range = VersionRange(lastAffected = "9.16.1")
+        assertTrue(range.contains(v("9.16.0")))
+        assertTrue(range.contains(v("9.16.1")))     // inclusive — the bound is still affected
+        assertFalse(range.contains(v("9.16.2")))
+    }
+
+    @Test
+    fun lastAffectedWithLowerBound() {
+        val range = VersionRange(introduced = "9.0", lastAffected = "9.16.1")
+        assertFalse(range.contains(v("8.9")))
+        assertTrue(range.contains(v("9.0")))
+        assertTrue(range.contains(v("9.16.1")))
+        assertFalse(range.contains(v("9.17.0")))
+    }
+
+    @Test
+    fun lastAffectedRemediationMentionsUpgrade() {
+        val vuln = KnownVuln("CVE-Z", "bind", VersionRange(lastAffected = "9.16.1"), cvss = 7.5)
+        val f = vuln.toFinding("s", "10.0.0.1", 53, ServiceFingerprint("BIND", "9.16.0"))
+        assertTrue(f.remediation.contains("later than 9.16.1"))
+    }
+
+    @Test
     fun severityMappingAndExploitBump() {
         assertEquals(Severity.HIGH, KnownVuln.severityOf(9.8, false))
         assertEquals(Severity.MEDIUM, KnownVuln.severityOf(5.3, false))

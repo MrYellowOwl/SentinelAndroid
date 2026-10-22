@@ -60,18 +60,25 @@ class SoftwareVersion private constructor(private val parts: List<Part>) : Compa
     }
 }
 
-/** Affected-version range: [introduced, fixed) plus any explicitly listed versions. Empty = all versions. */
+/**
+ * Affected-version range plus any explicitly listed versions. Empty range (no bounds, no exacts) = all versions.
+ * NVD expresses upper bounds two ways, so we keep both: [fixed] is exclusive ("fixed in X", so X is safe),
+ * [lastAffected] is inclusive ("affected up to and including X", so X is vulnerable).
+ */
 data class VersionRange(
-    val introduced: String? = null, // inclusive lower bound
-    val fixed: String? = null,      // exclusive upper bound ("fixed in")
+    val introduced: String? = null,    // inclusive lower bound (versionStartIncluding)
+    val fixed: String? = null,         // exclusive upper bound (versionEndExcluding / "fixed in")
+    val lastAffected: String? = null,  // inclusive upper bound (versionEndIncluding)
     val exact: List<String> = emptyList()
 ) {
     fun contains(version: SoftwareVersion): Boolean {
         if (exact.isNotEmpty() && exact.mapNotNull(SoftwareVersion::parse).any { it == version }) return true
-        if (exact.isNotEmpty() && introduced == null && fixed == null) return false
+        val hasBound = introduced != null || fixed != null || lastAffected != null
+        if (exact.isNotEmpty() && !hasBound) return false
         val aboveLower = introduced?.let { SoftwareVersion.parse(it)?.let { lo -> version >= lo } ?: true } ?: true
-        val belowUpper = fixed?.let { SoftwareVersion.parse(it)?.let { hi -> version < hi } ?: true } ?: true
-        return aboveLower && belowUpper
+        val belowFixed = fixed?.let { SoftwareVersion.parse(it)?.let { hi -> version < hi } ?: true } ?: true
+        val belowLast = lastAffected?.let { SoftwareVersion.parse(it)?.let { hi -> version <= hi } ?: true } ?: true
+        return aboveLower && belowFixed && belowLast
     }
 }
 
@@ -97,6 +104,7 @@ data class KnownVuln(
         val score = cvss?.let { " (CVSS $it)" }.orEmpty()
         val fix = fixText
             ?: range.fixed?.let { "Upgrade ${fingerprint.product} to $it or later." }
+            ?: range.lastAffected?.let { "Upgrade ${fingerprint.product} to a release later than $it." }
             ?: "Apply the vendor's patch or mitigation for $id."
         return Finding(
             title = (if (kev) "[KEV] " else "") + "$id in ${fingerprint.display}",

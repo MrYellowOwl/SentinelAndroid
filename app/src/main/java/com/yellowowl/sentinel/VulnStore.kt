@@ -1,6 +1,8 @@
 package com.yellowowl.sentinel
 
 import android.content.Context
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,17 +23,34 @@ object VulnStore {
 
     @Volatile private var matcher: VulnMatcher = VulnMatcher(emptyList())
     @Volatile private var appContext: Context? = null
+    private val initialLoad = CountDownLatch(1)
 
     fun init(context: Context) {
         if (appContext != null) return
         synchronized(this) {
             if (appContext != null) return
             appContext = context.applicationContext
-            apply(VulnFeed.loadCachedOrSeed(appContext!!))
         }
+        _status.value = _status.value.copy(source = "loading")
+        // Parse off the main thread — the baked seed can hold thousands of entries, and this runs
+        // in Application.onCreate(). A daemon thread keeps cold-start snappy.
+        Thread {
+            try {
+                apply(VulnFeed.loadCachedOrSeed(appContext!!))
+            } finally {
+                initialLoad.countDown()
+            }
+        }.apply { isDaemon = true; name = "vulnstore-load" }.start()
     }
 
-    fun matcher(): VulnMatcher = matcher
+    /**
+     * The matcher, used only from background scan threads. Waits briefly for the initial DB load so a
+     * scan launched moments after startup still matches against the full database rather than an empty one.
+     */
+    fun matcher(): VulnMatcher {
+        runCatching { initialLoad.await(10, TimeUnit.SECONDS) }
+        return matcher
+    }
 
     private fun apply(feed: VulnFeedData?) {
         if (feed == null) return
