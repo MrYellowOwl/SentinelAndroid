@@ -606,6 +606,7 @@ internal fun FindingsScreen(
     onUpdateDb: () -> Unit,
     onFilter: (Severity?) -> Unit,
     onExport: (ReportExporter.Format) -> Unit,
+    onPrintPdf: () -> Unit,
     onClear: () -> Unit,
     onDismiss: (String) -> Unit
 ) {
@@ -657,6 +658,9 @@ internal fun FindingsScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
                     Text("Export:", color = TextMuted, fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterVertically))
+                    OutlinedButton(onClick = onPrintPdf, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border)) {
+                        Text("PDF", color = Accent, fontSize = 13.sp)
+                    }
                     OutlinedButton(onClick = { onExport(ReportExporter.Format.CSV) }, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border)) {
                         Text("CSV", color = Accent, fontSize = 13.sp)
                     }
@@ -760,6 +764,16 @@ internal fun FindingCard(finding: Finding, onDismiss: (() -> Unit)? = null) {
             }
             Text(finding.title, color = TextMain, fontWeight = FontWeight.Bold, fontSize = 15.sp, lineHeight = 20.sp)
             Text(finding.target, color = Accent, fontSize = 12.sp)
+            val compliance = remember(finding.key) { Compliance.tag(finding).labels }
+            if (compliance.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    compliance.forEach { label ->
+                        Box(Modifier.background(SurfaceRaised, RoundedCornerShape(5.dp)).padding(horizontal = 7.dp, vertical = 2.dp)) {
+                            Text(label, color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            }
             Text(finding.details, color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp)
             HorizontalDivider(color = Border)
             Text("WHAT TO DO", color = TextMain, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
@@ -1524,6 +1538,8 @@ internal fun SettingsScreen(
     onInstallUpdate: () -> Unit,
     scanSchedule: ScanSchedule,
     onScheduleChange: (ScanSchedule) -> Unit,
+    scopeText: String,
+    onScopeChange: (String) -> Unit,
     historyCount: Int,
     onOpenHistory: () -> Unit,
     onBack: () -> Unit,
@@ -1531,6 +1547,7 @@ internal fun SettingsScreen(
     onOpenUrl: (String) -> Unit
 ) {
     var feedDraft by rememberSaveable(feedUrl) { mutableStateOf(feedUrl) }
+    var scopeDraft by rememberSaveable(scopeText) { mutableStateOf(scopeText) }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1579,6 +1596,21 @@ internal fun SettingsScreen(
                     }
                 }
                 Text("Scans only run when the phone is back on the authorized network. Turn on Alerts (Home) to be notified.", color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+            }
+        }
+
+        // ---- Engagement scope ----
+        item {
+            SettingsCard(Icons.Filled.Shield, "ENGAGEMENT", "Authorized scope") {
+                Text("List the IPs, CIDRs and domains you're authorized to assess (one per line or comma-separated). Findings outside this are flagged in the report. Leave empty to disable scope checks.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                OutlinedTextField(
+                    value = scopeDraft, onValueChange = { scopeDraft = it },
+                    placeholder = { Text("192.168.1.0/24\nexample.com", color = TextMuted) },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 5
+                )
+                OutlinedButton(onClick = { onScopeChange(scopeDraft) }, enabled = scopeDraft != scopeText, border = BorderStroke(1.dp, Border)) {
+                    Text("Save scope", color = Accent)
+                }
             }
         }
 

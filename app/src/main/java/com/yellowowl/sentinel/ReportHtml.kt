@@ -5,16 +5,38 @@ import java.util.Date
 
 /** Builds the shareable HTML report. Pure Kotlin so it can be unit tested. */
 object ReportHtml {
+    /** Plain-text one-liner used in the report's executive summary (pure, testable). */
+    fun execLine(findings: List<Finding>): String {
+        val c = FindingMerge.countBySeverity(findings)
+        val kev = findings.count { it.title.startsWith("[KEV]") }
+        val parts = Severity.entries.filter { (c[it] ?: 0) > 0 }.map { "${c[it]} ${it.label.lowercase()}" }
+        val head = if (findings.isEmpty()) "No findings recorded." else "${findings.size} finding(s): ${parts.joinToString(", ")}."
+        return head + if (kev > 0) " $kev flagged as actively exploited (CISA KEV) — prioritize these." else ""
+    }
+
     fun build(
         findings: List<Finding>,
         generatedAt: Date,
         appVersion: String,
-        annotations: Map<String, FindingAnnotation> = emptyMap()
+        annotations: Map<String, FindingAnnotation> = emptyMap(),
+        scopeEntries: List<Scope.Entry> = emptyList()
     ): String {
         val dateFormat = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT)
         val counts = FindingMerge.countBySeverity(findings)
         val summary = Severity.entries.joinToString("") { severity ->
             """<div class="stat ${severity.name.lowercase()}"><b>${counts[severity] ?: 0}</b><span>${severity.label}</span></div>"""
+        }
+
+        // Framework breakdown for the executive summary.
+        val byOwasp = findings.mapNotNull { Compliance.tag(it).owasp }.groupingBy { it }.eachCount()
+            .entries.sortedByDescending { it.value }
+        val frameworkHtml = if (byOwasp.isEmpty()) "" else
+            "<p><b>OWASP coverage:</b> " + byOwasp.joinToString("; ") { "${escape(it.key)} (${it.value})" } + "</p>"
+        val outOfScope = Scope.outOfScope(scopeEntries, findings.map { it.target })
+        val scopeHtml = when {
+            scopeEntries.isEmpty() -> ""
+            outOfScope.isEmpty() -> "<p><b>Scope:</b> all findings fall within the defined engagement scope.</p>"
+            else -> """<p class="oos"><b>Out of scope:</b> ${outOfScope.joinToString(", ") { escape(it) }} — review authorization before acting on these.</p>"""
         }
 
         fun row(f: Finding): String {
@@ -23,8 +45,9 @@ object ReportHtml {
                 """<span class="status ${it.status.name.lowercase()}">${escape(it.status.label)}</span>"""
             }.orEmpty()
             val notes = a?.notes?.takeIf { it.isNotBlank() }?.let { "<br><small>Notes: ${escape(it)}</small>" }.orEmpty()
+            val tags = Compliance.tag(f).labels.joinToString("") { """<span class="tag">${escape(it)}</span>""" }
             return """<tr><td><span class="sev ${f.severity.name.lowercase()}">${f.severity.label}</span></td>""" +
-                """<td><b>${escape(f.title)}</b> $statusTag<br><small>${escape(f.source)} · ${escape(dateFormat.format(Date(f.createdAt)))}</small>$notes</td>""" +
+                """<td><b>${escape(f.title)}</b> $statusTag<br><small>${escape(f.source)} · ${escape(dateFormat.format(Date(f.createdAt)))}</small>$notes${if (tags.isNotEmpty()) "<br>$tags" else ""}</td>""" +
                 """<td>${escape(f.target)}</td><td>${escape(f.details)}</td><td>${escape(f.remediation)}</td></tr>"""
         }
 
@@ -73,10 +96,15 @@ th{background:#f1f5f8}td{overflow-wrap:anywhere}small{color:#5d6874}
 h2{margin:26px 0 0;font-size:16px;color:#0d6b58;border-bottom:2px solid #d9e1e8;padding-bottom:4px}
 .status{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11px;font-weight:700;background:#eef2f5;color:#536171}
 .status.fixed{background:#e3f5ef;color:#0d6b58}.status.false_positive{background:#eef2f5;color:#70797f}.status.verified{background:#fff1d6;color:#8a5a00}
+.tag{display:inline-block;margin:3px 4px 0 0;padding:1px 7px;border-radius:5px;font-size:11px;background:#eef2f5;color:#45566b}
+.summary{border:1px solid #d9e1e8;border-radius:10px;padding:4px 16px;margin:18px 0}
+.oos{color:#b3261e}
+@media print{body{margin:0}.notice,.summary{break-inside:avoid}}
 </style></head><body>
 <h1>Sentinel Security Report</h1>
 <p>Generated ${escape(dateFormat.format(generatedAt))} · ${findings.size} finding(s) · Sentinel $appVersion</p>
 <div class="stats">$summary</div>
+<div class="summary"><h2 style="border:0;margin:10px 0 4px">Executive summary</h2><p>${escape(execLine(findings))}</p>$frameworkHtml$scopeHtml</div>
 <div class="notice"><b>Scope note:</b> Findings are automated indicators, not proof of exploitability. Validate them in context and only test systems you own or are authorized to assess.</div>
 $body
 <p><small>Generated locally on the device by Sentinel Security.</small></p></body></html>"""

@@ -18,7 +18,7 @@ object ReportData {
             .format(Date(epochMillis))
 
     private val CSV_COLUMNS = listOf(
-        "severity", "source", "scope", "target", "title", "details", "remediation", "status", "notes", "created_at"
+        "severity", "source", "scope", "target", "title", "details", "remediation", "owasp", "cis", "status", "notes", "created_at"
     )
 
     /** RFC-4180-style CSV: quote fields containing comma, quote, CR or LF; double internal quotes. */
@@ -27,8 +27,10 @@ object ReportData {
         sb.append(CSV_COLUMNS.joinToString(",")).append("\r\n")
         for (f in FindingMerge.prioritized(findings)) {
             val a = annotations[f.key]
+            val tag = Compliance.tag(f)
             val cells = listOf(
                 f.severity.label, f.source, f.scope, f.target, f.title, f.details, f.remediation,
+                tag.owasp.orEmpty(), tag.cis.orEmpty(),
                 a?.takeIf { !it.isDefault }?.status?.label.orEmpty(),
                 a?.notes.orEmpty(),
                 iso(f.createdAt)
@@ -67,6 +69,7 @@ object ReportData {
                 .put("details", f.details)
                 .put("remediation", f.remediation)
                 .put("created_at", iso(f.createdAt))
+            Compliance.tag(f).let { t -> if (t.owasp != null) o.put("owasp", t.owasp); if (t.cis != null) o.put("cis", t.cis) }
             if (a != null && !a.isDefault) o.put("status", a.status.label)
             if (!a?.notes.isNullOrBlank()) o.put("notes", a!!.notes)
             arr.put(o)

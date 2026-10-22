@@ -98,6 +98,7 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
     val scanSchedule by vm.scanSchedule.collectAsState()
     val history by vm.history.collectAsState()
     val nicknames by vm.nicknames.collectAsState()
+    val scopeText by vm.scopeText.collectAsState()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Dashboard) }
     var findingsFilter by rememberSaveable { mutableStateOf<Severity?>(null) }
     var hostDetailIp by rememberSaveable { mutableStateOf<String?>(null) }
@@ -224,6 +225,8 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onInstallUpdate = { vm.installUpdate(onFallback = openUrl) },
                 scanSchedule = scanSchedule,
                 onScheduleChange = vm::setScanSchedule,
+                scopeText = scopeText,
+                onScopeChange = vm::setScopeText,
                 historyCount = history.size,
                 onOpenHistory = { showHistory = true },
                 onBack = { showSettings = false },
@@ -306,6 +309,10 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onUpdateDb = vm::updateVulnDb,
                 onFilter = { findingsFilter = it },
                 onExport = exportReport,
+                onPrintPdf = {
+                    if (findings.isEmpty()) Toast.makeText(context, "Nothing to export yet. Run a scan first.", Toast.LENGTH_SHORT).show()
+                    else ReportExporter.printPdf(context, findings)
+                },
                 onClear = vm::clearFindings,
                 onDismiss = vm::dismissFinding
             )

@@ -106,6 +106,14 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { VulnStore.update(app) }
     }
 
+    // ---- Engagement scope ----
+    private val _scopeText = MutableStateFlow(SentinelSettings.scopeText(application))
+    val scopeText: StateFlow<String> = _scopeText.asStateFlow()
+    fun setScopeText(text: String) {
+        SentinelSettings.setScopeText(app, text)
+        _scopeText.value = text
+    }
+
     // ---- Device nicknames ----
     val nicknames: StateFlow<Map<String, String>> = NicknameStore.names
     fun setNickname(device: DeviceResult, name: String) = NicknameStore.set(app, Nicknames.keyFor(device), name)

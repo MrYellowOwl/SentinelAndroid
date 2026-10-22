@@ -14,6 +14,7 @@ object SentinelSettings {
     private const val KEY_SCAN_PROFILE = "scan_profile"
     private const val KEY_THEME_LIGHT = "theme_light"
     private const val KEY_SCAN_SCHEDULE = "scan_schedule"
+    private const val KEY_SCOPE = "engagement_scope"
 
     data class LastScan(val cidr: String, val at: Long, val devices: Int)
 
@@ -64,6 +65,12 @@ object SentinelSettings {
 
     fun setScanSchedule(context: Context, schedule: ScanSchedule) {
         prefs(context).edit().putString(KEY_SCAN_SCHEDULE, schedule.name).apply()
+    }
+
+    fun scopeText(context: Context): String = prefs(context).getString(KEY_SCOPE, "").orEmpty()
+
+    fun setScopeText(context: Context, text: String) {
+        prefs(context).edit().putString(KEY_SCOPE, text.trim()).apply()
     }
 
     fun feedUrl(context: Context): String =

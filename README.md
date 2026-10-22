@@ -111,11 +111,19 @@ Prefer to build it yourself? `git pull` and run `./gradlew :app:assembleRelease`
 | `WebDeep.kt` | CORS / security.txt / SRI / sensitive-path logic (tested) |
 | `SshAudit.kt` | SSH KEXINIT parsing + weak-algorithm flags (tested) |
 | `SmbScan.kt` | SMB2 negotiate build/parse + signing posture (tested) |
+| `Compliance.kt` | OWASP/CIS mapping for findings (tested) |
+| `Scope.kt` | Engagement scope CIDR/domain matching (tested) |
 | `Nicknames.kt`, `NicknameStore.kt` | Device-nickname helpers (tested) + persistence |
 | `tools/build_feed.py`, `feed/manual.json`, `feed/vuln_feed.json` | Exploit-feed builder, your curated entries, the published feed |
 | `.github/workflows/feed.yml`, `release.yml` | Daily feed refresh; tag-triggered APK build + release |
 
 ## Changelog
+
+**1.11.0 (in progress)**
+- **Compliance tagging**: every finding is mapped to an OWASP Top 10 2021 category and a CIS Controls v8 safeguard, shown on the finding card and in all exports (HTML/CSV/JSON).
+- **Engagement scope**: define authorized CIDRs/domains in Settings; the report's executive summary flags any out-of-scope targets.
+- **Executive summary** added to the HTML report (severity + KEV counts, OWASP coverage, scope note).
+- **Save as PDF**: the Findings tab can render the report to PDF via Android's print framework (neutral styling), alongside CSV/JSON.
 
 **1.10.0 (in progress)**
 - **Deeper website checks**: CORS reflection (incl. credentials), cookie SameSite, `security.txt`, Subresource Integrity on third-party scripts, and a generic sensitive-path sweep (`.git`, `.env`, `server-status`, `phpinfo`, backups) folded into the audit.

@@ -20,8 +20,9 @@ object ReportExporter {
     fun share(context: Context, findings: List<Finding>, format: Format): Boolean {
         val now = Date()
         val annotations = SentinelRepo.annotations.value
+        val scope = Scope.parse(SentinelSettings.scopeText(context))
         val content = when (format) {
-            Format.HTML -> ReportHtml.build(findings, now, BuildConfig.VERSION_NAME, annotations)
+            Format.HTML -> ReportHtml.build(findings, now, BuildConfig.VERSION_NAME, annotations, scope)
             Format.CSV -> ReportData.toCsv(findings, annotations)
             Format.JSON -> ReportData.toJson(findings, now, BuildConfig.VERSION_NAME, annotations)
         }
@@ -52,4 +53,24 @@ object ReportExporter {
 
     /** Back-compat shortcut used by the top-bar share button. */
     fun shareHtmlReport(context: Context, findings: List<Finding>): Boolean = share(context, findings, Format.HTML)
+
+    /**
+     * Renders the HTML report in an off-screen WebView and hands it to Android's print framework,
+     * where the user can "Save as PDF" (or send to a printer). Must be called on the main thread.
+     */
+    fun printPdf(context: Context, findings: List<Finding>) {
+        val now = Date()
+        val scope = Scope.parse(SentinelSettings.scopeText(context))
+        val html = ReportHtml.build(findings, now, BuildConfig.VERSION_NAME, SentinelRepo.annotations.value, scope)
+        val webView = android.webkit.WebView(context)
+        webView.webViewClient = object : android.webkit.WebViewClient() {
+            override fun onPageFinished(view: android.webkit.WebView, url: String?) {
+                val jobName = "Sentinel Security Report"
+                val printManager = context.getSystemService(android.content.Context.PRINT_SERVICE) as android.print.PrintManager
+                val adapter = view.createPrintDocumentAdapter(jobName)
+                printManager.print(jobName, adapter, android.print.PrintAttributes.Builder().build())
+            }
+        }
+        webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+    }
 }
