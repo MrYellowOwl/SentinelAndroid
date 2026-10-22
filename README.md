@@ -1,5 +1,7 @@
 # Sentinel Security
 
+[![CI](https://github.com/MrYellowOwl/SentinelAndroid/actions/workflows/ci.yml/badge.svg)](https://github.com/MrYellowOwl/SentinelAndroid/actions/workflows/ci.yml)
+
 **A local-first network and website security scanner for Android, with a Wear OS companion.**
 
 Sentinel audits the networks and websites you own or are authorized to assess — from your phone, with no accounts, analytics, or backend. It discovers and classifies devices, fingerprints services, matches versions against a continuously updated vulnerability feed, audits websites and TLS, and produces shareable reports. All assessment is **detection and reconnaissance only** — it never exploits, authenticates, or attacks.
