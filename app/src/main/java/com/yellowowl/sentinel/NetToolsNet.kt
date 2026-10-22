@@ -146,6 +146,46 @@ object NetToolsNet {
             }
         }
 
+    // ---- DNS/email security posture ----
+    private fun dnsQueryRaw(name: String, type: Int, resolver: String): MdnsDns.Message? =
+        DatagramSocket().use { socket ->
+            socket.soTimeout = 4000
+            val query = MdnsDns.query(name, type, recursionDesired = true)
+            socket.send(DatagramPacket(query, query.size, InetAddress.getByName(resolver), 53))
+            val buffer = ByteArray(4096)
+            val packet = DatagramPacket(buffer, buffer.size)
+            socket.receive(packet)
+            MdnsDns.parse(packet.data.copyOf(packet.length))
+        }
+
+    suspend fun dnsPosture(domain: String, resolver: String = "8.8.8.8"): Result<List<Finding>> = withContext(Dispatchers.IO) {
+        val host = domain.trim().lowercase().removePrefix("http://").removePrefix("https://").substringBefore('/').trimEnd('.')
+        if (!HOST_RE.matches(host) || !host.contains('.')) return@withContext Result.failure(IllegalArgumentException("Enter a domain name."))
+        try {
+            val txtType = MdnsDns.typeFor("TXT")
+            val apexTxt = runCatching { dnsQueryRaw(host, txtType, resolver) }.getOrNull()?.answers?.flatMap { it.txt }.orEmpty()
+            val spf = apexTxt.firstOrNull { it.trim().startsWith("v=spf1", ignoreCase = true) }
+
+            val dmarcTxt = runCatching { dnsQueryRaw("_dmarc.$host", txtType, resolver) }.getOrNull()?.answers?.flatMap { it.txt }.orEmpty()
+            val dmarc = dmarcTxt.firstOrNull { it.trim().startsWith("v=DMARC1", ignoreCase = true) }
+
+            var dkimFound = false
+            for (sel in DnsPosture.dkimSelectors) {
+                val txt = runCatching { dnsQueryRaw("$sel._domainkey.$host", txtType, resolver) }.getOrNull()?.answers?.flatMap { it.txt }.orEmpty()
+                if (txt.any { it.contains("v=DKIM1", ignoreCase = true) || it.contains("p=", ignoreCase = true) }) { dkimFound = true; break }
+            }
+
+            val caa = runCatching { dnsQueryRaw(host, 257, resolver) }.getOrNull()?.answers?.any { it.type == 257 } ?: false
+            val dnssec = runCatching { dnsQueryRaw(host, 48, resolver) }.getOrNull()?.answers?.any { it.type == 48 } ?: false
+            val hasMx = runCatching { dnsQueryRaw(host, MdnsDns.typeFor("MX"), resolver) }.getOrNull()?.answers?.any { it.target != null } ?: false
+
+            val records = DnsPosture.DnsRecords(host, spf, dmarc, dkimFound, caa, dnssec, hasMx)
+            Result.success(DnsPosture.findings(host, records))
+        } catch (e: Exception) {
+            Result.failure(IllegalStateException("DNS posture check failed: ${e.message ?: e.javaClass.simpleName}"))
+        }
+    }
+
     // ---- CT-log subdomain discovery (crt.sh) ----
     suspend fun subdomains(domain: String): Result<List<String>> = withContext(Dispatchers.IO) {
         val clean = domain.trim().lowercase().removePrefix("http://").removePrefix("https://").substringBefore('/')

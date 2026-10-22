@@ -83,19 +83,23 @@ data class KnownVuln(
     val summary: String = "",
     val exploitAvailable: Boolean = false,
     val referenceUrl: String? = null,
-    val fixText: String? = null  // overrides the auto "upgrade to X" message when a CVE needs specific guidance
+    val fixText: String? = null, // overrides the auto "upgrade to X" message when a CVE needs specific guidance
+    val kev: Boolean = false,    // in CISA's Known Exploited Vulnerabilities catalog (actively exploited)
+    val epss: Double? = null     // EPSS exploit-prediction probability 0–1
 ) {
-    val severity: Severity = severityOf(cvss, exploitAvailable)
+    val severity: Severity = severityOf(cvss, exploitAvailable || kev)
 
     /** Turns a match on a host:port into a saved finding. */
     fun toFinding(scope: String, ip: String, port: Int, fingerprint: ServiceFingerprint): Finding {
-        val exploitNote = if (exploitAvailable) " A public exploit is known to exist, so treat this as a priority." else ""
+        val kevNote = if (kev) " In CISA's Known Exploited Vulnerabilities catalog — actively exploited in the wild; patch immediately." else ""
+        val exploitNote = if (exploitAvailable && !kev) " A public exploit is known to exist, so treat this as a priority." else ""
+        val epssNote = epss?.let { " EPSS ${(it * 100).toInt()}% (likelihood of exploitation in the next 30 days)." }.orEmpty()
         val score = cvss?.let { " (CVSS $it)" }.orEmpty()
         val fix = fixText
             ?: range.fixed?.let { "Upgrade ${fingerprint.product} to $it or later." }
             ?: "Apply the vendor's patch or mitigation for $id."
         return Finding(
-            title = "$id in ${fingerprint.display}",
+            title = (if (kev) "[KEV] " else "") + "$id in ${fingerprint.display}",
             severity = severity,
             source = FindingSource.NETWORK,
             scope = scope,
@@ -103,14 +107,16 @@ data class KnownVuln(
             details = buildString {
                 append(summary.ifBlank { "$id affects ${fingerprint.display}." })
                 append(score)
+                append(kevNote)
                 append(exploitNote)
+                append(epssNote)
             }.trim(),
             remediation = listOfNotNull(fix, referenceUrl?.let { "Details: $it" }).joinToString(" ")
         )
     }
 
     companion object {
-        fun severityOf(cvss: Double?, exploitAvailable: Boolean): Severity {
+        fun severityOf(cvss: Double?, prioritized: Boolean): Severity {
             val base = when {
                 cvss == null -> Severity.MEDIUM
                 cvss >= 7.0 -> Severity.HIGH
@@ -118,8 +124,8 @@ data class KnownVuln(
                 cvss > 0.0 -> Severity.LOW
                 else -> Severity.INFO
             }
-            // Something with a public exploit is at least high priority, even at a middling CVSS.
-            return if (exploitAvailable && base.rank < Severity.HIGH.rank) Severity.HIGH else base
+            // A public exploit or KEV listing makes it at least high priority, even at a middling CVSS.
+            return if (prioritized && base.rank < Severity.HIGH.rank) Severity.HIGH else base
         }
     }
 }
@@ -136,7 +142,9 @@ class VulnMatcher(entries: List<KnownVuln>) {
             .filter { it.range.contains(version) }
             .sortedWith(
                 compareByDescending<KnownVuln> { it.severity.rank }
+                    .thenByDescending { it.kev }
                     .thenByDescending { it.exploitAvailable }
+                    .thenByDescending { it.epss ?: 0.0 }
                     .thenByDescending { it.cvss ?: 0.0 }
             )
     }
@@ -144,7 +152,9 @@ class VulnMatcher(entries: List<KnownVuln>) {
     fun findingsFor(scope: String, device: DeviceResult): List<Finding> =
         device.openPorts.flatMap { port ->
             val fp = port.fingerprint ?: return@flatMap emptyList()
-            match(fp).map { it.toFinding(scope, device.ipAddress, port.port, fp) }
+            val target = "${device.ipAddress}:${port.port}"
+            match(fp).map { it.toFinding(scope, device.ipAddress, port.port, fp) } +
+                listOfNotNull(EolData.finding(scope, target, fp))
         }
 
     companion object {

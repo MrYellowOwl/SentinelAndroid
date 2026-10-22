@@ -15,7 +15,7 @@ Usage:
 
 Products matched to Sentinel's fingerprints. Extend PRODUCTS as you add fingerprinters.
 """
-import argparse, csv, io, json, os, sys, time, urllib.error, urllib.request
+import argparse, csv, io, json, os, re, sys, time, urllib.error, urllib.request
 
 # NVD CPE vendor:product -> Sentinel product key (must match ServiceFingerprint.productKey / VulnMatcher.normalize)
 PRODUCTS = {
@@ -34,6 +34,39 @@ PRODUCTS = {
 }
 NVD_API = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 EDB_CSV = "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv"
+KEV_JSON = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+EPSS_API = "https://api.first.org/data/v1/epss"
+CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
+
+
+def cve_in(text):
+    """First CVE id embedded in an entry's id (manual ids may add suffixes)."""
+    m = CVE_RE.search(text or "")
+    return m.group(0).upper() if m else None
+
+
+def cisa_kev_set():
+    """CVE ids in CISA's Known Exploited Vulnerabilities catalog (actively exploited)."""
+    data = json.loads(fetch(KEV_JSON).decode("utf-8", "replace"))
+    return {v.get("cveID", "").upper() for v in data.get("vulnerabilities", []) if v.get("cveID")}
+
+
+def epss_scores(cve_ids):
+    """EPSS probability per CVE, batched against the FIRST API. Missing ids just get no score."""
+    out = {}
+    ids = [c for c in cve_ids if c]
+    for i in range(0, len(ids), 100):
+        batch = ids[i:i + 100]
+        url = f"{EPSS_API}?cve={','.join(batch)}"
+        try:
+            payload = json.loads(fetch(url).decode("utf-8", "replace"))
+            for row in payload.get("data", []):
+                cve, score = row.get("cve", "").upper(), row.get("epss")
+                if cve and score is not None:
+                    out[cve] = round(float(score), 4)
+        except Exception as e:  # noqa: BLE001
+            print(f"WARNING: EPSS batch failed ({e}); those scores omitted.", file=sys.stderr)
+    return out
 
 
 def fetch(url, headers=None, retries=3):
@@ -183,6 +216,29 @@ def main():
             continue
         seen.add(k)
         merged.append(v)
+
+    # Enrich with CISA KEV (actively exploited) and EPSS (exploitation likelihood). Both best-effort.
+    kev = set()
+    try:
+        print("Fetching CISA KEV catalog…", file=sys.stderr)
+        kev = cisa_kev_set()
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: KEV catalog unavailable ({e}); kev flags omitted.", file=sys.stderr)
+    epss = {}
+    try:
+        print("Fetching EPSS scores…", file=sys.stderr)
+        epss = epss_scores({cve_in(v.get("id", "")) for v in merged})
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: EPSS unavailable ({e}); scores omitted.", file=sys.stderr)
+    kev_count = 0
+    for v in merged:
+        cid = cve_in(v.get("id", ""))
+        if cid and cid in kev:
+            v["kev"] = True
+            kev_count += 1
+        if cid and cid in epss:
+            v["epss"] = epss[cid]
+    print(f"Tagged {kev_count} KEV and {sum(1 for v in merged if 'epss' in v)} EPSS entries.", file=sys.stderr)
 
     if len(merged) < args.min_entries:
         print(f"ERROR: only {len(merged)} entries (< {args.min_entries}); refusing to publish.", file=sys.stderr)

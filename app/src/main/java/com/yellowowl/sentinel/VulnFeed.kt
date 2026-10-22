@@ -103,7 +103,9 @@ object VulnFeed {
                     summary = item.optString("summary"),
                     exploitAvailable = item.optBoolean("exploit", false),
                     referenceUrl = item.optString("url").ifBlank { null },
-                    fixText = item.optString("fix").ifBlank { null }
+                    fixText = item.optString("fix").ifBlank { null },
+                    kev = item.optBoolean("kev", false),
+                    epss = if (item.has("epss")) item.optDouble("epss").takeIf { !it.isNaN() } else null
                 )
             )
         }

@@ -63,6 +63,7 @@ object WebsiteAuditor {
             if (phpVersion != null) {
                 val fp = ServiceFingerprint("php", phpVersion)
                 addAll(VulnStore.matcher().match(fp).map { it.toFinding(scope, host, if (final.port > 0) final.port else 443, fp) })
+                EolData.finding(scope, host, fp, FindingSource.WEB)?.let { add(it) }
             } else if (WebChecks.phpDetectedWithoutVersion(fetched.response.headers)) {
                 add(WebChecks.phpHiddenFinding(scope, host))
             }

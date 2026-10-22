@@ -106,11 +106,19 @@ Prefer to build it yourself? `git pull` and run `./gradlew :app:assembleRelease`
 | `IpExposure.kt` | Public-IP classification + info parsing for the exposure tool |
 | `TlsInspect.kt`, `TlsProbe.kt` | TLS grading logic (tested) + the handshake probe |
 | `CertSearch.kt` | crt.sh CT-log subdomain parsing |
+| `EolData.kt` | End-of-life software branch flagging (tested) |
+| `DnsPosture.kt` | SPF/DMARC/DKIM/CAA/DNSSEC evaluation (tested) |
 | `Nicknames.kt`, `NicknameStore.kt` | Device-nickname helpers (tested) + persistence |
 | `tools/build_feed.py`, `feed/manual.json`, `feed/vuln_feed.json` | Exploit-feed builder, your curated entries, the published feed |
 | `.github/workflows/feed.yml`, `release.yml` | Daily feed refresh; tag-triggered APK build + release |
 
 ## Changelog
+
+**1.9.0 (in progress)**
+- **CISA KEV tagging**: CVEs in the Known Exploited Vulnerabilities catalog are flagged `[KEV]`, bumped to high priority, and ranked first — the daily feed Action tags them.
+- **EPSS scores**: exploitation-likelihood % shown alongside CVSS and used to break ties when ranking findings.
+- **End-of-life flagging**: unsupported software branches (PHP ≤8.1, Apache 2.2, MySQL ≤5.7, older MariaDB) are flagged even without a matching CVE.
+- **DNS/email posture** (Tools): SPF, DMARC, DKIM, CAA and DNSSEC checks for a domain, graded into findings with fixes.
 
 **1.8.0 (in progress)**
 - **TLS/SSL deep inspection** in the website audit: probes which protocol versions a host accepts and the cipher each negotiates, grades the config A–F, and flags obsolete protocols (TLS 1.0/1.1, SSLv3), weak ciphers (RC4/3DES/NULL/EXPORT/anon) and missing TLS 1.3.

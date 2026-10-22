@@ -1057,6 +1057,7 @@ internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit) {
         PortScanTool(onCopy)
         WhoisTool(onCopy)
         SubdomainTool(onCopy)
+        DnsPostureTool()
         SubnetTool(onCopy)
         MacVendorTool(onCopy)
         WolTool()
@@ -1275,6 +1276,41 @@ private fun SubdomainTool(onCopy: (String) -> Unit) {
         RunButton(if (busy) "Searching…" else "Find subdomains", !busy && domain.isNotBlank(), run)
         if (!busy && !err && count > 0) Text("$count subdomain(s) found", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         ToolOutput(busy, out, err, onCopy, mono = true, scrollable = true)
+    }
+}
+
+@Composable
+private fun DnsPostureTool() {
+    val scope = rememberCoroutineScope()
+    var domain by rememberSaveable { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var findings by remember { mutableStateOf<List<Finding>?>(null) }
+    var err by remember { mutableStateOf<String?>(null) }
+    val run = {
+        if (!busy && domain.isNotBlank()) {
+            busy = true; findings = null; err = null
+            scope.launch {
+                NetToolsNet.dnsPosture(domain.trim())
+                    .onSuccess { findings = it }
+                    .onFailure { err = it.message }
+                busy = false
+            }
+        }
+    }
+    ToolCard("DNS / EMAIL POSTURE", "Checks SPF, DMARC, DKIM, CAA and DNSSEC for a domain — standard email-security and spoofing-resistance checks.") {
+        ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
+        RunButton(if (busy) "Checking…" else "Check posture", !busy && domain.isNotBlank(), run)
+        if (busy) Text("Querying DNS records…", color = TextMuted, fontSize = 13.sp)
+        err?.let { Text(it, color = HighColor, fontSize = 13.sp, lineHeight = 18.sp) }
+        findings?.forEach { f ->
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.padding(top = 5.dp).size(8.dp).background(f.severity.color(), CircleShape))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(f.title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, lineHeight = 17.sp)
+                    Text(f.details, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                }
+            }
+        }
     }
 }
 
