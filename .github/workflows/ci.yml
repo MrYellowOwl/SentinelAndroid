@@ -26,7 +26,7 @@ jobs:
           java-version: "17"
 
       # The ubuntu-latest runner ships the Android SDK (as release.yml relies on); no setup-android needed.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Unit tests
         run: |
