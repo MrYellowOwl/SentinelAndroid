@@ -44,4 +44,17 @@ class WebDeepTest {
         val git = WebDeep.sensitivePaths.first { it.path == "/.git/config" }
         assertEquals(Severity.HIGH, WebDeep.exposedPathFinding("s", "h", git).severity)
     }
+
+    @Test fun softNotFoundOnlyWhenRandomPathReturns200() {
+        assertTrue(WebDeep.looksLikeSoftNotFound(200))
+        assertTrue(!WebDeep.looksLikeSoftNotFound(404))
+        assertTrue(!WebDeep.looksLikeSoftNotFound(403))
+        assertTrue(!WebDeep.looksLikeSoftNotFound(null))
+    }
+
+    @Test fun softNotFoundFindingIsInfo() {
+        val f = WebDeep.softNotFoundFinding("s", "h")
+        assertEquals(Severity.INFO, f.severity)
+        assertTrue(f.title.contains("soft-404"))
+    }
 }

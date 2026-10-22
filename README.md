@@ -18,8 +18,8 @@ Kotlin · Jetpack Compose · Android 8.0+ (API 26) · targets API 36.
 - Opt-in background monitoring that alerts on new/departed devices and port changes (matched by MAC, so a DHCP change isn't a false positive).
 
 **Website audit**
-- HTTP→HTTPS enforcement, TLS certificate validity, and a graded TLS inspection (protocol versions + cipher suites, A–F).
-- Security headers (HSTS, CSP, X-Frame-Options, nosniff, Referrer-Policy), cookie flags (Secure/HttpOnly/SameSite), CORS reflection, Subresource Integrity, and a sensitive-path sweep.
+- HTTP→HTTPS enforcement, TLS certificate validity and strength (signature algorithm, key size, self-signed), and a graded TLS inspection (protocol versions + cipher suites, A–F).
+- Security headers (HSTS, CSP, X-Frame-Options, nosniff, Referrer-Policy), cookie flags (Secure/HttpOnly/SameSite), CORS reflection, Subresource Integrity, and a soft-404-aware sensitive-path sweep.
 - Optional WordPress audit: version, user enumeration, XML-RPC, plugin/theme inventory with CVE matching, exposed-file checks.
 
 **Prioritization & intelligence**
@@ -81,6 +81,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 ---
 
 ## Changelog
+
+**1.13.2** — Website-audit accuracy: TLS certificate strength checks (broken/weak signature algorithms, undersized RSA/EC keys, self-signed certs) and a soft-404 guard that suppresses false positives on servers that answer 200 for every path.
 
 **1.13.1** — In-app updater: when the OS hasn't granted Sentinel permission to install apps, it now opens the correct "allow this app to install" screen with a clear prompt instead of silently falling back to the GitHub page.
 

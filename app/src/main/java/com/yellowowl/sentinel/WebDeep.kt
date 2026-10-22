@@ -76,4 +76,12 @@ object WebDeep {
     fun exposedPathFinding(scope: String, host: String, path: SensitivePath): Finding =
         web(scope, host, "Exposed: ${path.path}", path.severity, path.what,
             if (path.severity == Severity.INFO) "No action needed." else "Remove or block access to ${path.path}; it should not be web-reachable.")
+
+    /** If a request for a known-nonexistent path returns 200, the server soft-404s and the sweep is unreliable. */
+    fun looksLikeSoftNotFound(randomPathStatus: Int?): Boolean = randomPathStatus == 200
+
+    fun softNotFoundFinding(scope: String, host: String): Finding =
+        web(scope, host, "Sensitive-path sweep skipped (server soft-404s)", Severity.INFO,
+            "A request for a random nonexistent path returned HTTP 200, so this server answers 200 for everything. The path sweep was skipped to avoid false positives.",
+            "Configure the server to return 404 for missing paths so exposure checks are meaningful.")
 }

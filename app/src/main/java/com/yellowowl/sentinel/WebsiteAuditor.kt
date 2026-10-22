@@ -22,7 +22,7 @@ object WebsiteAuditor {
     private class FetchResult(
         val response: HttpResponseInfo,
         val chain: List<String>,
-        val certNotAfter: Long?
+        val cert: CertCheck.CertInfo?
     )
 
     /** Throws IllegalArgumentException / IllegalStateException with a user-facing message when the audit can't run. */
@@ -52,7 +52,10 @@ object WebsiteAuditor {
 
         val findings = buildList {
             addAll(WebChecks.transportFindings(scope, requested, final, counterpart))
-            fetched.certNotAfter?.let { add(WebChecks.certificateFinding(scope, final.host, it, System.currentTimeMillis())) }
+            fetched.cert?.let { ci ->
+                ci.notAfter?.let { add(WebChecks.certificateFinding(scope, final.host, it, System.currentTimeMillis())) }
+                addAll(CertCheck.findings(scope, final.host, ci))
+            }
             // Deep TLS assessment: supported protocol versions + negotiated ciphers, graded.
             if (final.protocol.equals("https", ignoreCase = true)) {
                 val report = runCatching {
@@ -100,13 +103,28 @@ object WebsiteAuditor {
             out
         }
 
+        // Soft-404 guard: if the server returns 200 for a known-nonexistent path, its 200s are
+        // meaningless and the sweep would be all false positives — so skip it and say why.
+        val softProbe = async {
+            val randomPath = "/sentinel-not-here-${System.nanoTime().toString(36)}"
+            val r = Http.get("$base$randomPath", timeoutMillis = 6_000, maxBytes = 512, followRedirects = false)
+            WebDeep.looksLikeSoftNotFound(r?.code)
+        }
+
         // Sensitive-path sweep: probe each path concurrently; report the ones that actually serve.
-        val pathFindings = WebDeep.sensitivePaths.map { sp ->
+        val pathProbes = WebDeep.sensitivePaths.map { sp ->
             async {
                 val r = Http.get("$base${sp.path}", timeoutMillis = 6_000, maxBytes = 2048, followRedirects = false)
                 if (r != null && r.code == 200) WebDeep.exposedPathFinding(scope, host, sp) else null
             }
-        }.awaitAll().filterNotNull()
+        }
+
+        val pathFindings = if (softProbe.await()) {
+            pathProbes.forEach { it.cancel() }
+            listOf(WebDeep.softNotFoundFinding(scope, host))
+        } else {
+            pathProbes.awaitAll().filterNotNull()
+        }
 
         corsAndSri.await() + pathFindings
     }
@@ -145,12 +163,27 @@ object WebsiteAuditor {
                     }
                 }
                 val headers = WebChecks.normalizeHeaders(connection.headerFields)
-                val certNotAfter = (connection as? HttpsURLConnection)?.let { https ->
+                val cert = (connection as? HttpsURLConnection)?.let { https ->
                     runCatching {
-                        https.serverCertificates.filterIsInstance<X509Certificate>().firstOrNull()?.notAfter?.time
+                        val leaf = https.serverCertificates.filterIsInstance<X509Certificate>().firstOrNull()
+                        leaf?.let {
+                            val pub = it.publicKey
+                            val bits = when (pub) {
+                                is java.security.interfaces.RSAPublicKey -> pub.modulus.bitLength()
+                                is java.security.interfaces.ECPublicKey -> pub.params.curve.field.fieldSize
+                                else -> 0
+                            }
+                            CertCheck.CertInfo(
+                                notAfter = it.notAfter?.time,
+                                sigAlg = it.sigAlgName,
+                                keyAlgo = pub?.algorithm,
+                                keyBits = bits,
+                                selfSigned = it.subjectX500Principal == it.issuerX500Principal
+                            )
+                        }
                     }.getOrNull()
                 }
-                return FetchResult(HttpResponseInfo(current, code, headers), chain, certNotAfter)
+                return FetchResult(HttpResponseInfo(current, code, headers), chain, cert)
             } finally {
                 connection.disconnect()
             }
