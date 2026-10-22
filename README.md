@@ -76,7 +76,7 @@ No accounts, analytics, or backend. Findings stay on your device (and, for the w
 
 ## License
 
-Not yet licensed. Until a license is added, all rights are reserved. _(Choose a license — e.g. MIT, Apache-2.0, or GPL-3.0 — to set how others may use the code.)_
+Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're free to use, modify, and redistribute it, including commercially, provided you retain the license and attribution notices. The license includes an explicit patent grant and provides the software "as is," without warranty.
 
 ---
 
