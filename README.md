@@ -108,11 +108,20 @@ Prefer to build it yourself? `git pull` and run `./gradlew :app:assembleRelease`
 | `CertSearch.kt` | crt.sh CT-log subdomain parsing |
 | `EolData.kt` | End-of-life software branch flagging (tested) |
 | `DnsPosture.kt` | SPF/DMARC/DKIM/CAA/DNSSEC evaluation (tested) |
+| `WebDeep.kt` | CORS / security.txt / SRI / sensitive-path logic (tested) |
+| `SshAudit.kt` | SSH KEXINIT parsing + weak-algorithm flags (tested) |
+| `SmbScan.kt` | SMB2 negotiate build/parse + signing posture (tested) |
 | `Nicknames.kt`, `NicknameStore.kt` | Device-nickname helpers (tested) + persistence |
 | `tools/build_feed.py`, `feed/manual.json`, `feed/vuln_feed.json` | Exploit-feed builder, your curated entries, the published feed |
 | `.github/workflows/feed.yml`, `release.yml` | Daily feed refresh; tag-triggered APK build + release |
 
 ## Changelog
+
+**1.10.0 (in progress)**
+- **Deeper website checks**: CORS reflection (incl. credentials), cookie SameSite, `security.txt`, Subresource Integrity on third-party scripts, and a generic sensitive-path sweep (`.git`, `.env`, `server-status`, `phpinfo`, backups) folded into the audit.
+- **SSH algorithm audit** (Tools): reads the banner + KEXINIT and flags weak KEX/host-key/cipher/MAC algorithms — no login.
+- **SMB signing check** (Tools): single SMB2 negotiate reads the dialect and whether message signing is required (NTLM-relay risk). No auth, no share access.
+- **SNMP info** (Tools): queries the default `public` community; a reply is itself flagged, with disclosed system info.
 
 **1.9.0 (in progress)**
 - **CISA KEV tagging**: CVEs in the Known Exploited Vulnerabilities catalog are flagged `[KEV]`, bumped to high priority, and ranked first — the daily feed Action tags them.

@@ -6,6 +6,9 @@ import java.net.URL
 import java.security.cert.X509Certificate
 import javax.net.ssl.HttpsURLConnection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /**
@@ -67,6 +70,7 @@ object WebsiteAuditor {
             } else if (WebChecks.phpDetectedWithoutVersion(fetched.response.headers)) {
                 add(WebChecks.phpHiddenFinding(scope, host))
             }
+            addAll(deepChecks(scope, final))
         }
 
         WebsiteAuditResult(
@@ -76,6 +80,35 @@ object WebsiteAuditor {
             redirectChain = fetched.chain,
             findings = FindingMerge.prioritized(WebChecks.withSummary(scope, host, findings))
         )
+    }
+
+    private const val CORS_PROBE_ORIGIN = "https://sentinel-cors-probe.example"
+
+    /** CORS reflection, SRI on the live page, and a bounded sensitive-path sweep. All plain GETs. */
+    private suspend fun deepChecks(scope: String, final: URL): List<Finding> = coroutineScope {
+        val host = final.host
+        val base = "${final.protocol}://${final.authority}"
+
+        val corsAndSri = async {
+            val out = ArrayList<Finding>()
+            val probe = Http.get(final.toString(), timeoutMillis = 8_000, extraHeaders = mapOf("Origin" to CORS_PROBE_ORIGIN))
+            if (probe != null) {
+                WebDeep.corsFinding(scope, host, CORS_PROBE_ORIGIN,
+                    probe.header("access-control-allow-origin"), probe.header("access-control-allow-credentials"))?.let { out.add(it) }
+                if (probe.body.isNotBlank()) WebDeep.sriFinding(scope, host, probe.body)?.let { out.add(it) }
+            }
+            out
+        }
+
+        // Sensitive-path sweep: probe each path concurrently; report the ones that actually serve.
+        val pathFindings = WebDeep.sensitivePaths.map { sp ->
+            async {
+                val r = Http.get("$base${sp.path}", timeoutMillis = 6_000, maxBytes = 2048, followRedirects = false)
+                if (r != null && r.code == 200) WebDeep.exposedPathFinding(scope, host, sp) else null
+            }
+        }.awaitAll().filterNotNull()
+
+        corsAndSri.await() + pathFindings
     }
 
     private fun probeCounterpart(requested: URL): CounterpartProbe {

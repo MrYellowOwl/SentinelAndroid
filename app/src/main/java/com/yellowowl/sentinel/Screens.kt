@@ -1057,7 +1057,10 @@ internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit) {
         PortScanTool(onCopy)
         WhoisTool(onCopy)
         SubdomainTool(onCopy)
-        DnsPostureTool()
+        HostFindingsTool("DNS / EMAIL POSTURE", "Checks SPF, DMARC, DKIM, CAA and DNSSEC for a domain — email-security and spoofing-resistance.", "example.com", "Check posture") { NetToolsNet.dnsPosture(it) }
+        HostFindingsTool("SSH AUDIT", "Reads the SSH banner and advertised algorithms (KEX, host-key, cipher, MAC) and flags weak/legacy ones. No login.", "192.168.1.1", "Audit SSH") { NetToolsNet.sshAudit(it) }
+        HostFindingsTool("SMB SIGNING", "SMB2 negotiate: reads the dialect and whether message signing is required (relay risk). No auth, no share access.", "192.168.1.1", "Check SMB") { NetToolsNet.smbInfo(it) }
+        HostFindingsTool("SNMP INFO", "Queries SNMP with the default \"public\" community; a reply is itself a misconfiguration and discloses system info.", "192.168.1.1", "Query SNMP") { NetToolsNet.snmpInfo(it) }
         SubnetTool(onCopy)
         MacVendorTool(onCopy)
         WolTool()
@@ -1280,27 +1283,33 @@ private fun SubdomainTool(onCopy: (String) -> Unit) {
 }
 
 @Composable
-private fun DnsPostureTool() {
+private fun HostFindingsTool(
+    eyebrow: String,
+    description: String,
+    placeholder: String,
+    actionLabel: String,
+    runner: suspend (String) -> Result<List<Finding>>
+) {
     val scope = rememberCoroutineScope()
-    var domain by rememberSaveable { mutableStateOf("") }
+    var input by rememberSaveable(eyebrow) { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var findings by remember { mutableStateOf<List<Finding>?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
     val run = {
-        if (!busy && domain.isNotBlank()) {
+        if (!busy && input.isNotBlank()) {
             busy = true; findings = null; err = null
             scope.launch {
-                NetToolsNet.dnsPosture(domain.trim())
+                runner(input.trim())
                     .onSuccess { findings = it }
                     .onFailure { err = it.message }
                 busy = false
             }
         }
     }
-    ToolCard("DNS / EMAIL POSTURE", "Checks SPF, DMARC, DKIM, CAA and DNSSEC for a domain — standard email-security and spoofing-resistance checks.") {
-        ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
-        RunButton(if (busy) "Checking…" else "Check posture", !busy && domain.isNotBlank(), run)
-        if (busy) Text("Querying DNS records…", color = TextMuted, fontSize = 13.sp)
+    ToolCard(eyebrow, description) {
+        ToolField(input, { input = it }, "Host or domain", !busy, placeholder = placeholder, keyboard = KeyboardType.Uri, onGo = run)
+        RunButton(if (busy) "Working…" else actionLabel, !busy && input.isNotBlank(), run)
+        if (busy) Text("Running…", color = TextMuted, fontSize = 13.sp)
         err?.let { Text(it, color = HighColor, fontSize = 13.sp, lineHeight = 18.sp) }
         findings?.forEach { f ->
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

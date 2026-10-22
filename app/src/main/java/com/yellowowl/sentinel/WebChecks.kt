@@ -194,6 +194,14 @@ object WebChecks {
                 "Add HttpOnly to session and authentication cookies."
             )
         }
+        val noSameSite = cookies.filter { it.sameSite == null || it.sameSite == "none" }
+        if (noSameSite.isNotEmpty()) {
+            add(
+                "Cookies without SameSite protection", Severity.LOW,
+                "${noSameSite.size} cookie(s) have no SameSite attribute (or SameSite=None): ${namesOf(noSameSite)}. Cross-site requests will send them, enabling CSRF against session cookies.",
+                "Set SameSite=Lax (or Strict) on session cookies; use SameSite=None only with Secure for genuinely cross-site cookies."
+            )
+        }
 
         return findings
     }
@@ -364,13 +372,15 @@ object WebChecks {
         remediation = "Confirm the PHP version on the server ('php -v') and keep it fully patched. Hiding the version (expose_php = Off) is good practice but isn't a substitute for patching."
     )
 
-    data class CookieInfo(val name: String, val secure: Boolean, val httpOnly: Boolean)
+    data class CookieInfo(val name: String, val secure: Boolean, val httpOnly: Boolean, val sameSite: String? = null)
 
     fun parseCookie(header: String): CookieInfo {
         val parts = header.split(";").map { it.trim() }
         val name = parts.firstOrNull()?.substringBefore("=")?.trim().orEmpty().ifBlank { "(unnamed)" }
         val attributes = parts.drop(1).map { it.substringBefore("=").trim().lowercase() }.toSet()
-        return CookieInfo(name, secure = "secure" in attributes, httpOnly = "httponly" in attributes)
+        val sameSite = parts.drop(1).firstOrNull { it.substringBefore("=").trim().equals("samesite", ignoreCase = true) }
+            ?.substringAfter("=", "")?.trim()?.lowercase()?.ifBlank { null }
+        return CookieInfo(name, secure = "secure" in attributes, httpOnly = "httponly" in attributes, sameSite = sameSite)
     }
 
     private fun namesOf(cookies: List<CookieInfo>): String {

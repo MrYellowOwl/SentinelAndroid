@@ -23,7 +23,8 @@ object Http {
         urlString: String,
         timeoutMillis: Int = 8_000,
         maxBytes: Int = 512 * 1024,
-        followRedirects: Boolean = true
+        followRedirects: Boolean = true,
+        extraHeaders: Map<String, String> = emptyMap()
     ): Result? = withContext(Dispatchers.IO) {
         var current = runCatching { URI(urlString).toURL() }.getOrNull() ?: return@withContext null
         repeat(WebChecks.MAX_REDIRECTS + 1) {
@@ -36,6 +37,7 @@ object Http {
                 connection.useCaches = false
                 connection.setRequestProperty("User-Agent", USER_AGENT)
                 connection.setRequestProperty("Accept", "*/*")
+                extraHeaders.forEach { (k, v) -> connection.setRequestProperty(k, v) }
                 val code = try { connection.responseCode } catch (_: Exception) { return@withContext null }
                 if (followRedirects && WebChecks.isRedirect(code)) {
                     val next = WebChecks.resolveRedirect(current, connection.getHeaderField("Location"))

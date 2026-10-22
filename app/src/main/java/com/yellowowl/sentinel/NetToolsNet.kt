@@ -146,6 +146,127 @@ object NetToolsNet {
             }
         }
 
+    // ---- SMB2 negotiate / signing posture (no auth, no share access) ----
+    suspend fun smbInfo(host: String, port: Int = 445): Result<List<Finding>> = withContext(Dispatchers.IO) {
+        if (!HOST_RE.matches(host)) return@withContext Result.failure(IllegalArgumentException("Enter a valid host or IP."))
+        try {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(host, port), 5000)
+                socket.soTimeout = 5000
+                val req = SmbScan.negotiateRequest()
+                socket.getOutputStream().write(req); socket.getOutputStream().flush()
+                val input = socket.getInputStream()
+                val nb = readN(input, 4) ?: return@withContext Result.failure(IllegalStateException("No SMB2 response."))
+                val len = ((nb[1].toInt() and 0xFF) shl 16) or ((nb[2].toInt() and 0xFF) shl 8) or (nb[3].toInt() and 0xFF)
+                if (len !in 1..131072) return@withContext Result.failure(IllegalStateException("Unexpected SMB response."))
+                val body = readN(input, len) ?: return@withContext Result.failure(IllegalStateException("Truncated SMB response."))
+                val info = SmbScan.parseNegotiateResponse(body)
+                    ?: return@withContext Result.failure(IllegalStateException("Not an SMB2 server (or SMBv1-only)."))
+                Result.success(SmbScan.findings("", "$host:$port", info))
+            }
+        } catch (e: Exception) {
+            Result.failure(IllegalStateException("SMB check failed: ${e.message ?: e.javaClass.simpleName}"))
+        }
+    }
+
+    // ---- SNMP system info (default community) ----
+    private val SNMP_OIDS = linkedMapOf(
+        "1.3.6.1.2.1.1.1.0" to "System", "1.3.6.1.2.1.1.5.0" to "Name",
+        "1.3.6.1.2.1.1.6.0" to "Location", "1.3.6.1.2.1.1.4.0" to "Contact"
+    )
+
+    suspend fun snmpInfo(host: String, community: String = "public"): Result<List<Finding>> = withContext(Dispatchers.IO) {
+        if (!HOST_RE.matches(host)) return@withContext Result.failure(IllegalArgumentException("Enter a valid host or IP."))
+        val values = LinkedHashMap<String, String>()
+        try {
+            DatagramSocket().use { socket ->
+                socket.soTimeout = 2500
+                var reqId = 1
+                for ((oid, label) in SNMP_OIDS) {
+                    try {
+                        val query = Snmp.buildGet(community, oid, reqId++)
+                        socket.send(DatagramPacket(query, query.size, InetAddress.getByName(host), 161))
+                        val buf = ByteArray(2048)
+                        val pkt = DatagramPacket(buf, buf.size)
+                        socket.receive(pkt)
+                        val resp = Snmp.parse(pkt.data.copyOf(pkt.length)) ?: continue
+                        val vb = resp.varbinds.firstOrNull { it.value.isNotEmpty() } ?: continue
+                        val text = String(vb.value, Charsets.UTF_8).trim().filter { it >= ' ' }
+                        if (text.isNotBlank()) values[label] = text.take(160)
+                    } catch (_: Exception) { /* this OID didn't answer; try the next */ }
+                }
+            }
+        } catch (e: Exception) {
+            return@withContext Result.failure(IllegalStateException("SNMP query failed: ${e.message ?: e.javaClass.simpleName}"))
+        }
+        if (values.isEmpty()) return@withContext Result.failure(IllegalStateException("No SNMP response (no SNMP, or a non-default community is set)."))
+        val detail = values.entries.joinToString(" · ") { "${it.key}: ${it.value}" }
+        Result.success(listOf(
+            Finding(
+                title = "SNMP readable with community \"$community\"",
+                severity = Severity.MEDIUM, source = FindingSource.NETWORK, scope = "", target = "$host:161",
+                details = "The device answered SNMP GETs using the default community \"$community\", disclosing: $detail.",
+                remediation = "Change the SNMP community from the default, restrict SNMP to management hosts, or disable SNMP/upgrade to SNMPv3 with auth+priv."
+            )
+        ))
+    }
+
+    // ---- SSH algorithm audit (banner + KEXINIT, no auth) ----
+    suspend fun sshAudit(host: String, port: Int = 22): Result<List<Finding>> = withContext(Dispatchers.IO) {
+        if (!HOST_RE.matches(host)) return@withContext Result.failure(IllegalArgumentException("Enter a valid host or IP."))
+        try {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(host, port), 5000)
+                socket.soTimeout = 6000
+                val input = socket.getInputStream()
+                val output = socket.getOutputStream()
+
+                // Read identification lines until the server's "SSH-..." banner.
+                var banner: String? = null
+                repeat(4) {
+                    val line = readLine(input) ?: return@repeat
+                    if (line.startsWith("SSH-")) { banner = line.trim(); return@repeat }
+                }
+                if (banner == null) return@withContext Result.failure(IllegalStateException("Not an SSH service (no identification banner)."))
+                output.write("SSH-2.0-SentinelSecurity\r\n".toByteArray()); output.flush()
+
+                val lenBuf = readN(input, 4) ?: return@withContext Result.success(SshAudit.findings("", "$host:$port", banner, null))
+                val packetLen = ((lenBuf[0].toInt() and 0xFF) shl 24) or ((lenBuf[1].toInt() and 0xFF) shl 16) or
+                    ((lenBuf[2].toInt() and 0xFF) shl 8) or (lenBuf[3].toInt() and 0xFF)
+                if (packetLen !in 1..65536) return@withContext Result.success(SshAudit.findings("", "$host:$port", banner, null))
+                val packet = readN(input, packetLen) ?: return@withContext Result.success(SshAudit.findings("", "$host:$port", banner, null))
+                val paddingLen = packet[0].toInt() and 0xFF
+                val payload = packet.copyOfRange(1, (packetLen - paddingLen).coerceIn(1, packet.size))
+                val kex = SshAudit.parseKexInit(payload)
+                Result.success(SshAudit.findings("", "$host:$port", banner, kex))
+            }
+        } catch (e: Exception) {
+            Result.failure(IllegalStateException("SSH audit failed: ${e.message ?: e.javaClass.simpleName}"))
+        }
+    }
+
+    private fun readLine(input: java.io.InputStream): String? {
+        val sb = StringBuilder()
+        while (sb.length < 512) {
+            val b = input.read()
+            if (b < 0) return if (sb.isEmpty()) null else sb.toString()
+            if (b == '\n'.code) return sb.toString()
+            if (b != '\r'.code) sb.append(b.toChar())
+        }
+        return sb.toString()
+    }
+
+    private fun readN(input: java.io.InputStream, n: Int): ByteArray? {
+        val buf = ByteArray(n)
+        var read = 0
+        while (read < n) {
+            val r = input.read(buf, read, n - read)
+            if (r < 0) return null
+            read += r
+        }
+        return buf
+    }
+
     // ---- DNS/email security posture ----
     private fun dnsQueryRaw(name: String, type: Int, resolver: String): MdnsDns.Message? =
         DatagramSocket().use { socket ->
