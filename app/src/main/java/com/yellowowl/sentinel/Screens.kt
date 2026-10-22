@@ -1057,7 +1057,7 @@ private fun WalkthroughFindingCard(
 // ---------------------------------------------------------------- Tools tab (PortDroid-style utilities)
 
 @Composable
-internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit) {
+internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit, shodanKey: String = "", vtKey: String = "") {
     Column(
         modifier = modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1075,6 +1075,7 @@ internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit) {
         HostFindingsTool("SSH AUDIT", "Reads the SSH banner and advertised algorithms (KEX, host-key, cipher, MAC) and flags weak/legacy ones. No login.", "192.168.1.1", "Audit SSH") { NetToolsNet.sshAudit(it) }
         HostFindingsTool("SMB SIGNING", "SMB2 negotiate: reads the dialect and whether message signing is required (relay risk). No auth, no share access.", "192.168.1.1", "Check SMB") { NetToolsNet.smbInfo(it) }
         HostFindingsTool("SNMP INFO", "Queries SNMP with the default \"public\" community; a reply is itself a misconfiguration and discloses system info.", "192.168.1.1", "Query SNMP") { NetToolsNet.snmpInfo(it) }
+        HostFindingsTool("EXTERNAL INTEL", "Passive context from Shodan (IPs) and VirusTotal (IPs/domains). Bring your own API keys in Settings.", "example.com or 1.2.3.4", "Look up") { NetToolsNet.externalIntel(it, shodanKey, vtKey) }
         SubnetTool(onCopy)
         MacVendorTool(onCopy)
         WolTool()
@@ -1540,6 +1541,10 @@ internal fun SettingsScreen(
     onScheduleChange: (ScanSchedule) -> Unit,
     scopeText: String,
     onScopeChange: (String) -> Unit,
+    shodanKey: String,
+    onShodanChange: (String) -> Unit,
+    vtKey: String,
+    onVtChange: (String) -> Unit,
     historyCount: Int,
     onOpenHistory: () -> Unit,
     onBack: () -> Unit,
@@ -1548,6 +1553,8 @@ internal fun SettingsScreen(
 ) {
     var feedDraft by rememberSaveable(feedUrl) { mutableStateOf(feedUrl) }
     var scopeDraft by rememberSaveable(scopeText) { mutableStateOf(scopeText) }
+    var shodanDraft by rememberSaveable(shodanKey) { mutableStateOf(shodanKey) }
+    var vtDraft by rememberSaveable(vtKey) { mutableStateOf(vtKey) }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1610,6 +1617,18 @@ internal fun SettingsScreen(
                 )
                 OutlinedButton(onClick = { onScopeChange(scopeDraft) }, enabled = scopeDraft != scopeText, border = BorderStroke(1.dp, Border)) {
                     Text("Save scope", color = Accent)
+                }
+            }
+        }
+
+        // ---- External intel keys ----
+        item {
+            SettingsCard(Icons.Filled.OpenInNew, "EXTERNAL INTEL", "API keys (optional)") {
+                Text("Bring-your-own keys for the External Intel tool. Shodan enriches IPs; VirusTotal checks IP/domain reputation. Stored only on this device.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                ToolField(shodanDraft, { shodanDraft = it }, "Shodan API key", enabled = true, onGo = { onShodanChange(shodanDraft) })
+                ToolField(vtDraft, { vtDraft = it }, "VirusTotal API key", enabled = true, onGo = { onVtChange(vtDraft) })
+                OutlinedButton(onClick = { onShodanChange(shodanDraft); onVtChange(vtDraft) }, enabled = shodanDraft != shodanKey || vtDraft != vtKey, border = BorderStroke(1.dp, Border)) {
+                    Text("Save keys", color = Accent)
                 }
             }
         }

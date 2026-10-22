@@ -99,6 +99,8 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
     val history by vm.history.collectAsState()
     val nicknames by vm.nicknames.collectAsState()
     val scopeText by vm.scopeText.collectAsState()
+    val shodanKey by vm.shodanKey.collectAsState()
+    val vtKey by vm.vtKey.collectAsState()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Dashboard) }
     var findingsFilter by rememberSaveable { mutableStateOf<Severity?>(null) }
     var hostDetailIp by rememberSaveable { mutableStateOf<String?>(null) }
@@ -227,6 +229,10 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onScheduleChange = vm::setScanSchedule,
                 scopeText = scopeText,
                 onScopeChange = vm::setScopeText,
+                shodanKey = shodanKey,
+                onShodanChange = vm::setShodanKey,
+                vtKey = vtKey,
+                onVtChange = vm::setVtKey,
                 historyCount = history.size,
                 onOpenHistory = { showHistory = true },
                 onBack = { showSettings = false },
@@ -299,7 +305,9 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
             )
             AppScreen.Tools -> ToolsScreen(
                 modifier = modifier,
-                onCopy = copyText
+                onCopy = copyText,
+                shodanKey = shodanKey,
+                vtKey = vtKey
             )
             AppScreen.Findings -> FindingsScreen(
                 modifier = modifier,

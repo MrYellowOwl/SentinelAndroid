@@ -114,6 +114,14 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
         _scopeText.value = text
     }
 
+    // ---- External intel API keys (bring-your-own) ----
+    private val _shodanKey = MutableStateFlow(SentinelSettings.shodanKey(application))
+    val shodanKey: StateFlow<String> = _shodanKey.asStateFlow()
+    fun setShodanKey(key: String) { SentinelSettings.setShodanKey(app, key); _shodanKey.value = key }
+    private val _vtKey = MutableStateFlow(SentinelSettings.virusTotalKey(application))
+    val vtKey: StateFlow<String> = _vtKey.asStateFlow()
+    fun setVtKey(key: String) { SentinelSettings.setVirusTotalKey(app, key); _vtKey.value = key }
+
     // ---- Device nicknames ----
     val nicknames: StateFlow<Map<String, String>> = NicknameStore.names
     fun setNickname(device: DeviceResult, name: String) = NicknameStore.set(app, Nicknames.keyFor(device), name)

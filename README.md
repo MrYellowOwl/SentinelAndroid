@@ -113,11 +113,15 @@ Prefer to build it yourself? `git pull` and run `./gradlew :app:assembleRelease`
 | `SmbScan.kt` | SMB2 negotiate build/parse + signing posture (tested) |
 | `Compliance.kt` | OWASP/CIS mapping for findings (tested) |
 | `Scope.kt` | Engagement scope CIDR/domain matching (tested) |
+| `ExternalIntel.kt` | Shodan + VirusTotal parsing/findings (tested) |
 | `Nicknames.kt`, `NicknameStore.kt` | Device-nickname helpers (tested) + persistence |
 | `tools/build_feed.py`, `feed/manual.json`, `feed/vuln_feed.json` | Exploit-feed builder, your curated entries, the published feed |
 | `.github/workflows/feed.yml`, `release.yml` | Daily feed refresh; tag-triggered APK build + release |
 
 ## Changelog
+
+**1.12.0 (in progress)**
+- **External intel** (Tools, bring-your-own-key): Shodan host lookup (internet-facing ports, org, OS, associated CVEs) for IPs, and VirusTotal reputation for IPs/domains. Keys are entered in Settings and stored only on the device. Passive/read-only.
 
 **1.11.0 (in progress)**
 - **Compliance tagging**: every finding is mapped to an OWASP Top 10 2021 category and a CIS Controls v8 safeguard, shown on the finding card and in all exports (HTML/CSV/JSON).

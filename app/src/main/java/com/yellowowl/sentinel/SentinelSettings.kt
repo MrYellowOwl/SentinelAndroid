@@ -15,6 +15,8 @@ object SentinelSettings {
     private const val KEY_THEME_LIGHT = "theme_light"
     private const val KEY_SCAN_SCHEDULE = "scan_schedule"
     private const val KEY_SCOPE = "engagement_scope"
+    private const val KEY_SHODAN = "shodan_key"
+    private const val KEY_VT = "virustotal_key"
 
     data class LastScan(val cidr: String, val at: Long, val devices: Int)
 
@@ -66,6 +68,11 @@ object SentinelSettings {
     fun setScanSchedule(context: Context, schedule: ScanSchedule) {
         prefs(context).edit().putString(KEY_SCAN_SCHEDULE, schedule.name).apply()
     }
+
+    fun shodanKey(context: Context): String = prefs(context).getString(KEY_SHODAN, "").orEmpty()
+    fun setShodanKey(context: Context, key: String) { prefs(context).edit().putString(KEY_SHODAN, key.trim()).apply() }
+    fun virusTotalKey(context: Context): String = prefs(context).getString(KEY_VT, "").orEmpty()
+    fun setVirusTotalKey(context: Context, key: String) { prefs(context).edit().putString(KEY_VT, key.trim()).apply() }
 
     fun scopeText(context: Context): String = prefs(context).getString(KEY_SCOPE, "").orEmpty()
 

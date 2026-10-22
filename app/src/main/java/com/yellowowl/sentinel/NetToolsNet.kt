@@ -146,6 +146,30 @@ object NetToolsNet {
             }
         }
 
+    // ---- External intel (bring-your-own-key: Shodan + VirusTotal) ----
+    suspend fun externalIntel(target: String, shodanKey: String, vtKey: String): Result<List<Finding>> = withContext(Dispatchers.IO) {
+        val host = target.trim().lowercase().removePrefix("http://").removePrefix("https://").substringBefore('/').substringBefore(':')
+        if (host.isBlank()) return@withContext Result.failure(IllegalArgumentException("Enter a host, IP or domain."))
+        if (shodanKey.isBlank() && vtKey.isBlank())
+            return@withContext Result.failure(IllegalStateException("Add a Shodan and/or VirusTotal API key in Settings first."))
+        val isIp = Ipv4.parse(host) != null
+        val out = ArrayList<Finding>()
+
+        if (shodanKey.isNotBlank() && isIp) {
+            val r = Http.get("https://api.shodan.io/shodan/host/$host?key=$shodanKey", timeoutMillis = 12000)
+            if (r != null && r.code == 200) ExternalIntel.parseShodan(r.body)?.let { out.addAll(ExternalIntel.shodanFindings("", target, it)) }
+            else if (r != null && r.code == 404) out.add(Finding(title = "Shodan: no data for $host", severity = Severity.INFO, source = FindingSource.NETWORK, scope = "", target = target, details = "Shodan has no record of this IP (not seen by its scanners).", remediation = "No action needed."))
+        }
+        if (vtKey.isNotBlank()) {
+            val path = if (isIp) "ip_addresses/$host" else "domains/$host"
+            val r = Http.get("https://www.virustotal.com/api/v3/$path", timeoutMillis = 12000, extraHeaders = mapOf("x-apikey" to vtKey))
+            if (r != null && r.code == 200) ExternalIntel.parseVirusTotal(r.body)?.let { out.add(ExternalIntel.vtFinding("", target, it)) }
+        }
+
+        if (out.isEmpty()) Result.failure(IllegalStateException("No external data returned (check the keys, or the target isn't indexed)."))
+        else Result.success(out)
+    }
+
     // ---- SMB2 negotiate / signing posture (no auth, no share access) ----
     suspend fun smbInfo(host: String, port: Int = 445): Result<List<Finding>> = withContext(Dispatchers.IO) {
         if (!HOST_RE.matches(host)) return@withContext Result.failure(IllegalArgumentException("Enter a valid host or IP."))
