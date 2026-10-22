@@ -196,17 +196,26 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Downloads + installs the APK; returns the page URL to open as a fallback when it can't. */
+    /** Downloads + installs the APK; [onFallback] opens the release page only as a last resort. */
     fun installUpdate(onFallback: (String) -> Unit) {
         val status = _appUpdate.value
         val apk = status.apkUrl
         if (status.installing) return
-        if (apk == null) { onFallback(status.pageUrl); return }
+        if (apk == null) {
+            _appUpdate.update { it.copy(message = "This release has no APK attached yet — opening the release page.", isError = true) }
+            onFallback(status.pageUrl)
+            return
+        }
         _appUpdate.update { it.copy(installing = true) }
         viewModelScope.launch {
-            val ok = AppInstaller.downloadAndInstall(app, apk)
-            _appUpdate.update { it.copy(installing = false, message = if (ok) "Opening installer…" else "Download failed — opening the release page.", isError = !ok) }
-            if (!ok) onFallback(status.pageUrl)
+            val result = AppInstaller.downloadAndInstall(app, apk)
+            val message = when (result) {
+                AppInstaller.Result.LAUNCHED -> "Downloaded — follow the installer prompt to finish."
+                AppInstaller.Result.NEEDS_PERMISSION -> "Allow Sentinel to install apps in the screen that opened, then tap Download & install again."
+                AppInstaller.Result.FAILED -> "Couldn't download the update — opening the release page so you can install it manually."
+            }
+            _appUpdate.update { it.copy(installing = false, message = message, isError = result == AppInstaller.Result.FAILED) }
+            if (result == AppInstaller.Result.FAILED) onFallback(status.pageUrl)
         }
     }
 
