@@ -7,13 +7,36 @@ package com.yellowowl.sentinel
 object DnsPosture {
     data class DnsRecords(
         val domain: String,
-        val spf: String? = null,        // the v=spf1 TXT at the apex, if any
+        val spf: String? = null,        // the v=spf1 TXT at the apex, if any (first one)
         val dmarc: String? = null,      // the v=DMARC1 TXT at _dmarc, if any
         val dkimFound: Boolean = false, // a DKIM key at a common selector
         val caaPresent: Boolean = false,
         val dnssecPresent: Boolean = false,
-        val hasMx: Boolean = false
+        val hasMx: Boolean = false,
+        val allSpf: List<String> = emptyList() // every v=spf1 TXT at the apex (to detect duplicates)
     )
+
+    /** Count of SPF mechanisms that trigger a DNS lookup (the RFC 7208 limit is 10, cumulative). */
+    fun spfLookupCount(spf: String?): Int {
+        if (spf == null) return 0
+        var n = 0
+        for (raw in spf.trim().split(Regex("\\s+")).drop(1)) {
+            val t = raw.removePrefix("+").removePrefix("-").removePrefix("~").removePrefix("?").lowercase()
+            when {
+                t.startsWith("include:") || t.startsWith("redirect=") || t.startsWith("exists:") -> n++
+                t == "a" || t.startsWith("a:") || t.startsWith("a/") -> n++
+                t == "mx" || t.startsWith("mx:") || t.startsWith("mx/") -> n++
+                t == "ptr" || t.startsWith("ptr:") -> n++
+            }
+        }
+        return n
+    }
+
+    /** Read a DMARC tag value (e.g. p, pct, rua, sp). */
+    fun dmarcTag(dmarc: String?, tag: String): String? {
+        if (dmarc == null) return null
+        return Regex("""\b$tag\s*=\s*([^;\s]+)""", RegexOption.IGNORE_CASE).find(dmarc)?.groupValues?.get(1)
+    }
 
     /** The qualifier on the SPF "all" mechanism: '-' (fail), '~' (softfail), '?' (neutral), '+' (pass/any). */
     fun spfAllQualifier(spf: String?): Char? {
@@ -55,6 +78,13 @@ object DnsPosture {
             '-' -> f("SPF hardfail configured", Severity.INFO,
                 "SPF ends in -all (hardfail) — a strong configuration.", "No action needed.")
         }
+        if (records.allSpf.size > 1) f("Multiple SPF records", Severity.MEDIUM,
+            "${records.allSpf.size} SPF records are published for $host. RFC 7208 allows exactly one — multiple records cause a permerror and SPF is ignored entirely.",
+            "Merge them into a single v=spf1 record.")
+        val lookups = spfLookupCount(records.spf)
+        if (lookups > 10) f("SPF exceeds the 10 DNS-lookup limit", Severity.MEDIUM,
+            "The SPF record uses at least $lookups lookup mechanisms (include/a/mx/ptr/exists). The RFC 7208 limit is 10 (cumulative), so receivers return permerror.",
+            "Reduce or flatten includes/a/mx/ptr lookups to stay within 10.")
 
         // DMARC
         when (val p = dmarcPolicy(records.dmarc)) {
@@ -66,6 +96,15 @@ object DnsPosture {
                 "After reviewing aggregate reports, raise the policy to quarantine, then reject.")
             else -> f("DMARC enforced (p=$p)", Severity.INFO,
                 "DMARC policy is p=$p — enforcing.", "No action needed.")
+        }
+        if (records.dmarc != null) {
+            val pct = dmarcTag(records.dmarc, "pct")?.toIntOrNull()
+            if (pct != null && pct < 100 && dmarcPolicy(records.dmarc) != "none") f("DMARC only partially enforced (pct=$pct)", Severity.LOW,
+                "DMARC applies its policy to only $pct% of failing mail (pct=$pct); the rest passes through.",
+                "Raise pct to 100 once you're confident legitimate mail passes.")
+            if (dmarcTag(records.dmarc, "rua") == null) f("DMARC has no aggregate reporting (rua)", Severity.LOW,
+                "The DMARC record has no rua address, so you receive no reports on who is sending (or spoofing) as $host.",
+                "Add rua=mailto:you@example.com to collect aggregate reports.")
         }
 
         if (!records.dkimFound) f("DKIM not found at common selectors", Severity.INFO,

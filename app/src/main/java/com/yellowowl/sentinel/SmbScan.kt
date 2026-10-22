@@ -56,6 +56,44 @@ object SmbScan {
         return SmbInfo(dialect, signingRequired = securityMode and 0x02 != 0, signingEnabled = securityMode and 0x01 != 0)
     }
 
+    // ---- SMBv1 (legacy; EternalBlue/WannaCry era) ----
+
+    /** SMB1 SMB_COM_NEGOTIATE offering the "NT LM 0.12" dialect, wrapped in a NetBIOS session header. */
+    fun smb1NegotiateRequest(): ByteArray {
+        val header = ByteArray(32)
+        byteArrayOf(0xFF.toByte(), 'S'.code.toByte(), 'M'.code.toByte(), 'B'.code.toByte()).copyInto(header, 0)
+        header[4] = 0x72                      // SMB_COM_NEGOTIATE
+        header[9] = 0x18                       // Flags (case-insensitive, canonical paths)
+        // Flags2, PIDHigh, signature, TID/PID/UID/MID all left zero.
+        val dialect = byteArrayOf(0x02) + "NT LM 0.12".toByteArray(Charsets.US_ASCII) + byteArrayOf(0)
+        val body = byteArrayOf(0) +            // WordCount = 0
+            byteArrayOf((dialect.size and 0xFF).toByte(), ((dialect.size shr 8) and 0xFF).toByte()) + // ByteCount (LE)
+            dialect
+        val smb = header + body
+        val nb = byteArrayOf(0, ((smb.size shr 16) and 0xFF).toByte(), ((smb.size shr 8) and 0xFF).toByte(), (smb.size and 0xFF).toByte())
+        return nb + smb
+    }
+
+    /** True if [raw] is a successful SMB1 NEGOTIATE response that selected a dialect (i.e. SMBv1 is enabled). */
+    fun isSmb1Response(raw: ByteArray): Boolean {
+        val smb = if (raw.size > 4 && raw[0].toInt() == 0 && (raw[4].toInt() and 0xFF) == 0xFF) raw.copyOfRange(4, raw.size) else raw
+        if (smb.size < 35) return false
+        if ((smb[0].toInt() and 0xFF) != 0xFF || smb[1].toInt() != 'S'.code || smb[2].toInt() != 'M'.code || smb[3].toInt() != 'B'.code) return false
+        if ((smb[4].toInt() and 0xFF) != 0x72) return false                      // NEGOTIATE response
+        val status = (smb[5].toInt() and 0xFF) or (smb[6].toInt() and 0xFF shl 8) or (smb[7].toInt() and 0xFF shl 16) or (smb[8].toInt() and 0xFF shl 24)
+        if (status != 0) return false                                            // server errored
+        val wordCount = smb[32].toInt() and 0xFF
+        if (wordCount == 0) return false
+        val dialectIndex = (smb[33].toInt() and 0xFF) or ((smb[34].toInt() and 0xFF) shl 8)
+        return dialectIndex != 0xFFFF                                            // 0xFFFF = no dialect accepted
+    }
+
+    fun smbv1Finding(scope: String, target: String): Finding = Finding(
+        title = "SMBv1 enabled", severity = Severity.HIGH, source = FindingSource.NETWORK, scope = scope, target = target,
+        details = "The host responded to an SMBv1 negotiation. SMBv1 is obsolete and insecure (the EternalBlue/WannaCry family of exploits), and has no message signing by default.",
+        remediation = "Disable SMBv1 entirely (Windows: remove the SMB1 feature; Samba: min protocol = SMB2). Nothing should still require it."
+    )
+
     fun findings(scope: String, target: String, info: SmbInfo): List<Finding> {
         val out = ArrayList<Finding>()
         fun f(title: String, sev: Severity, details: String, fix: String) =

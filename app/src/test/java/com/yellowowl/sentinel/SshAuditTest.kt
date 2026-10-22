@@ -45,6 +45,10 @@ class SshAuditTest {
 
     @Test fun weakAlgorithmClassifiers() {
         assertTrue(SshAudit.weakKex("diffie-hellman-group1-sha1"))
+        assertTrue(SshAudit.weakKex("diffie-hellman-group14-sha1"))
+        assertTrue(SshAudit.weakKex("gss-group1-sha1-toWM5Slw5Ew8Mqkay+al2g=="))
+        assertTrue(!SshAudit.weakKex("diffie-hellman-group14-sha256"))
+        assertTrue(!SshAudit.weakKex("sntrup761x25519-sha512@openssh.com"))
         assertTrue(SshAudit.weakHostKey("ssh-dss"))
         assertTrue(SshAudit.weakHostKey("ssh-rsa"))
         assertTrue(SshAudit.weakCipher("3des-cbc"))

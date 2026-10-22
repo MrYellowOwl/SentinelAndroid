@@ -48,6 +48,41 @@ class SmbScanTest {
         assertNull(SmbScan.parseNegotiateResponse(byteArrayOf(1, 2, 3)))
     }
 
+    /** Minimal SMB1 NEGOTIATE response: optional NetBIOS + SMB1 header + wordCount + dialectIndex. */
+    private fun smb1Response(status: Int, wordCount: Int, dialectIndex: Int, withNetbios: Boolean = true): ByteArray {
+        val smb = ByteArray(35)
+        smb[0] = 0xFF.toByte(); smb[1] = 'S'.code.toByte(); smb[2] = 'M'.code.toByte(); smb[3] = 'B'.code.toByte()
+        smb[4] = 0x72
+        smb[5] = (status and 0xFF).toByte(); smb[6] = ((status shr 8) and 0xFF).toByte()
+        smb[32] = (wordCount and 0xFF).toByte()
+        smb[33] = (dialectIndex and 0xFF).toByte(); smb[34] = ((dialectIndex shr 8) and 0xFF).toByte()
+        return if (withNetbios) byteArrayOf(0, 0, 0, smb.size.toByte()) + smb else smb
+    }
+
+    @Test fun smb1RequestOffersNtLm012() {
+        val req = SmbScan.smb1NegotiateRequest()
+        assertEquals(0, req[0].toInt())                 // NetBIOS type
+        assertEquals(0xFF, req[4].toInt() and 0xFF)     // SMB1 magic after header
+        assertEquals(0x72, req[8].toInt())              // SMB_COM_NEGOTIATE
+        assertTrue(String(req, Charsets.US_ASCII).contains("NT LM 0.12"))
+    }
+
+    @Test fun detectsSmb1WhenDialectAccepted() {
+        assertTrue(SmbScan.isSmb1Response(smb1Response(status = 0, wordCount = 17, dialectIndex = 0)))
+        assertTrue(SmbScan.isSmb1Response(smb1Response(0, 17, 0, withNetbios = false)))
+    }
+
+    @Test fun rejectsSmb1WhenNoDialectOrError() {
+        assertFalse(SmbScan.isSmb1Response(smb1Response(status = 0, wordCount = 17, dialectIndex = 0xFFFF))) // no dialect accepted
+        assertFalse(SmbScan.isSmb1Response(smb1Response(status = 0x0034, wordCount = 17, dialectIndex = 0)))  // error status
+        assertFalse(SmbScan.isSmb1Response(smb1Response(status = 0, wordCount = 0, dialectIndex = 0)))        // no words
+        assertFalse(SmbScan.isSmb1Response(ByteArray(40)))                                                   // not an SMB header
+    }
+
+    @Test fun smbv1FindingIsHigh() {
+        assertEquals(Severity.HIGH, SmbScan.smbv1Finding("s", "1.2.3.4:445").severity)
+    }
+
     @Test fun findingsFlagNoSigning() {
         val fs = SmbScan.findings("s", "1.2.3.4:445", SmbScan.SmbInfo(0x0300, signingRequired = false, signingEnabled = true))
         assertTrue(fs.any { it.title == "SMB signing not required" && it.severity == Severity.MEDIUM })

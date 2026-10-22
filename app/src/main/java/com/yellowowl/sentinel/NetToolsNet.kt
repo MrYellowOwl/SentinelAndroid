@@ -173,6 +173,11 @@ object NetToolsNet {
     // ---- SMB2 negotiate / signing posture (no auth, no share access) ----
     suspend fun smbInfo(host: String, port: Int = 445): Result<List<Finding>> = withContext(Dispatchers.IO) {
         if (!HOST_RE.matches(host)) return@withContext Result.failure(IllegalArgumentException("Enter a valid host or IP."))
+        val target = "$host:$port"
+        val out = ArrayList<Finding>()
+        var reached = false
+
+        // SMB2/3 negotiate → dialect + signing posture.
         try {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress(host, port), 5000)
@@ -180,16 +185,40 @@ object NetToolsNet {
                 val req = SmbScan.negotiateRequest()
                 socket.getOutputStream().write(req); socket.getOutputStream().flush()
                 val input = socket.getInputStream()
-                val nb = readN(input, 4) ?: return@withContext Result.failure(IllegalStateException("No SMB2 response."))
-                val len = ((nb[1].toInt() and 0xFF) shl 16) or ((nb[2].toInt() and 0xFF) shl 8) or (nb[3].toInt() and 0xFF)
-                if (len !in 1..131072) return@withContext Result.failure(IllegalStateException("Unexpected SMB response."))
-                val body = readN(input, len) ?: return@withContext Result.failure(IllegalStateException("Truncated SMB response."))
-                val info = SmbScan.parseNegotiateResponse(body)
-                    ?: return@withContext Result.failure(IllegalStateException("Not an SMB2 server (or SMBv1-only)."))
-                Result.success(SmbScan.findings("", "$host:$port", info))
+                val nb = readN(input, 4)
+                if (nb != null) {
+                    reached = true
+                    val len = ((nb[1].toInt() and 0xFF) shl 16) or ((nb[2].toInt() and 0xFF) shl 8) or (nb[3].toInt() and 0xFF)
+                    if (len in 1..131072) {
+                        val body = readN(input, len)
+                        if (body != null) SmbScan.parseNegotiateResponse(body)?.let { out.addAll(SmbScan.findings("", target, it)) }
+                    }
+                }
             }
-        } catch (e: Exception) {
-            Result.failure(IllegalStateException("SMB check failed: ${e.message ?: e.javaClass.simpleName}"))
+        } catch (_: Exception) { /* fall through to SMB1 probe */ }
+
+        // SMB1 negotiate → positively detect SMBv1 (a finding in its own right).
+        try {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(host, port), 5000)
+                socket.soTimeout = 5000
+                val req = SmbScan.smb1NegotiateRequest()
+                socket.getOutputStream().write(req); socket.getOutputStream().flush()
+                val input = socket.getInputStream()
+                val nb = readN(input, 4)
+                if (nb != null) {
+                    reached = true
+                    val len = ((nb[1].toInt() and 0xFF) shl 16) or ((nb[2].toInt() and 0xFF) shl 8) or (nb[3].toInt() and 0xFF)
+                    val body = if (len in 1..131072) readN(input, len) else null
+                    if (body != null && SmbScan.isSmb1Response(body)) out.add(SmbScan.smbv1Finding("", target))
+                }
+            }
+        } catch (_: Exception) { /* SMB1 likely disabled — good */ }
+
+        when {
+            out.isNotEmpty() -> Result.success(out)
+            reached -> Result.failure(IllegalStateException("SMB is open but didn't return a readable negotiate response."))
+            else -> Result.failure(IllegalStateException("No SMB service responded on $target."))
         }
     }
 
@@ -309,7 +338,8 @@ object NetToolsNet {
         try {
             val txtType = MdnsDns.typeFor("TXT")
             val apexTxt = runCatching { dnsQueryRaw(host, txtType, resolver) }.getOrNull()?.answers?.flatMap { it.txt }.orEmpty()
-            val spf = apexTxt.firstOrNull { it.trim().startsWith("v=spf1", ignoreCase = true) }
+            val allSpf = apexTxt.filter { it.trim().startsWith("v=spf1", ignoreCase = true) }
+            val spf = allSpf.firstOrNull()
 
             val dmarcTxt = runCatching { dnsQueryRaw("_dmarc.$host", txtType, resolver) }.getOrNull()?.answers?.flatMap { it.txt }.orEmpty()
             val dmarc = dmarcTxt.firstOrNull { it.trim().startsWith("v=DMARC1", ignoreCase = true) }
@@ -324,7 +354,7 @@ object NetToolsNet {
             val dnssec = runCatching { dnsQueryRaw(host, 48, resolver) }.getOrNull()?.answers?.any { it.type == 48 } ?: false
             val hasMx = runCatching { dnsQueryRaw(host, MdnsDns.typeFor("MX"), resolver) }.getOrNull()?.answers?.any { it.target != null } ?: false
 
-            val records = DnsPosture.DnsRecords(host, spf, dmarc, dkimFound, caa, dnssec, hasMx)
+            val records = DnsPosture.DnsRecords(host, spf, dmarc, dkimFound, caa, dnssec, hasMx, allSpf)
             Result.success(DnsPosture.findings(host, records))
         } catch (e: Exception) {
             Result.failure(IllegalStateException("DNS posture check failed: ${e.message ?: e.javaClass.simpleName}"))

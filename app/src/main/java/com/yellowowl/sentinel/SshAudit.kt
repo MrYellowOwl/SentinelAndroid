@@ -37,10 +37,10 @@ object SshAudit {
     }
 
     fun weakKex(a: String): Boolean {
-        val k = a.lowercase()
-        return k == "diffie-hellman-group1-sha1" || k == "diffie-hellman-group14-sha1" ||
-            k == "diffie-hellman-group-exchange-sha1" || k.endsWith("-sha1") && k.startsWith("diffie-hellman") ||
-            k.startsWith("gss-") || k == "rsa1024-sha1"
+        val k = a.lowercase().substringBefore('@')  // ignore vendor suffixes like @openssh.com
+        // Any SHA-1 key exchange is deprecated (covers group1/group14/group-exchange-sha1, rsa1024-sha1);
+        // group1 is 1024-bit MODP; GSSAPI KEX is frequently misconfigured.
+        return k.endsWith("sha1") || k.contains("group1-") || k.startsWith("gss-")
     }
 
     fun weakHostKey(a: String): Boolean {

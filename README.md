@@ -82,6 +82,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
+**1.13.0** — Accuracy improvements: SMBv1 detection (EternalBlue-era risk), deeper SPF/DMARC checks (multiple-record, >10-lookup limit, DMARC pct/rua), and a tightened SSH weak-algorithm classifier.
+
 **1.12.0** — External intel: Shodan host lookup and VirusTotal reputation (bring-your-own-key, passive/read-only).
 
 **1.11.0** — OWASP/CIS compliance tags on findings and exports; engagement scope with out-of-scope flagging; executive summary; Save-as-PDF.
