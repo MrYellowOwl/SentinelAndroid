@@ -82,6 +82,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
+**1.16.0** — Broader, more reliable passive recon. The subdomain finder now queries crt.sh and Certspotter together and unions the results (each indexes certificates the other misses), with internal-resolving hosts listed first. The external-intel tool now works on domains as well as IPs (it resolves the domain for Shodan) and reports precisely why a lookup came back empty — bad key (401), rate limit (429), not indexed (404), or unreachable — instead of a single vague message.
+
 **1.15.1** — Fix and extend the subdomain finder. crt.sh often took longer than the old 15s timeout and its large responses could be truncated past the body cap (which silently parsed to "no results"); it now gets a 45s read timeout and a 16 MB cap, tolerates a truncated/non-JSON body by salvaging host names, falls back to Certspotter when crt.sh is slow or down, and reports a clear reason when both fail. Discovered subdomains are now resolved to their A records, with any that point at RFC 1918 (internal) addresses flagged — surfacing DNS that leaks internal infrastructure.
 
 **1.15.0** — Closes the loop on the expanded CVE database by teaching Sentinel to fingerprint more services: Memcached (`version`), Elasticsearch (REST version, and an exposed-cluster warning), BIND/unbound (`version.bind` CHAOS query), and Jetty/lighttpd/Tomcat from their `Server` header — so hundreds of previously-dormant CVEs now match. Adds Elasticsearch/Memcached exposure checks, end-of-life flagging for PostgreSQL/Elasticsearch/BIND, and a note on version-based findings reminding you that distros backport fixes without changing the version string.

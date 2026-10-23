@@ -52,6 +52,13 @@ class CertSearchTest {
         )
     }
 
+    @Test fun sortHostsDedupesAndOrdersByDepth() {
+        val merged = CertSearch.sortHosts(
+            listOf("api.example.com", "example.com", "www.example.com", "example.com", "a.b.example.com")
+        )
+        assertEquals(listOf("example.com", "api.example.com", "www.example.com", "a.b.example.com"), merged)
+    }
+
     @Test fun flagsSubdomainsResolvingToPrivateIps() {
         assertTrue(CertSearch.hasInternalAddress(listOf("10.0.0.5")))
         assertTrue(CertSearch.hasInternalAddress(listOf("93.184.216.34", "192.168.1.10")))

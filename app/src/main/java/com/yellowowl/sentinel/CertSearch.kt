@@ -89,13 +89,16 @@ object CertSearch {
 
     private fun filterAndSort(names: List<String>, domain: String): List<String> {
         val base = domain.trim().lowercase().trimEnd('.')
-        val found = LinkedHashSet<String>()
+        val found = ArrayList<String>()
         for (raw in names) {
             val name = raw.trim().lowercase().removePrefix("*.").trimEnd('.')
             if (name.isEmpty()) continue
             if (name == base || name.endsWith(".$base")) found.add(name)
         }
-        // Sort by depth then alphabetically so the registrable domain and apex come first.
-        return found.sortedWith(compareBy({ it.count { c -> c == '.' } }, { it }))
+        return sortHosts(found)
     }
+
+    /** Dedupe and order host names by depth then alphabetically, so the apex and registrable domain lead. */
+    fun sortHosts(names: Collection<String>): List<String> =
+        LinkedHashSet(names).sortedWith(compareBy({ it.count { c -> c == '.' } }, { it }))
 }

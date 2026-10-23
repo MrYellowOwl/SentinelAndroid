@@ -154,20 +154,42 @@ object NetToolsNet {
             return@withContext Result.failure(IllegalStateException("Add a Shodan and/or VirusTotal API key in Settings first."))
         val isIp = Ipv4.parse(host) != null
         val out = ArrayList<Finding>()
+        val problems = ArrayList<String>()
 
-        if (shodanKey.isNotBlank() && isIp) {
-            val r = Http.get("https://api.shodan.io/shodan/host/$host?key=$shodanKey", timeoutMillis = 12000)
-            if (r != null && r.code == 200) ExternalIntel.parseShodan(r.body)?.let { out.addAll(ExternalIntel.shodanFindings("", target, it)) }
-            else if (r != null && r.code == 404) out.add(Finding(title = "Shodan: no data for $host", severity = Severity.INFO, source = FindingSource.NETWORK, scope = "", target = target, details = "Shodan has no record of this IP (not seen by its scanners).", remediation = "No action needed."))
+        if (shodanKey.isNotBlank()) {
+            // Shodan is keyed by IP. Resolve a domain to its A record first so it works on hostnames too.
+            val ip = if (isIp) host else runCatching { queryOne(host, "A", "8.8.8.8") }.getOrNull()
+                ?.firstOrNull { it.type.equals("A", ignoreCase = true) }?.value
+            if (ip == null) {
+                problems.add("Shodan: couldn't resolve $host to an IP.")
+            } else {
+                val r = Http.get("https://api.shodan.io/shodan/host/$ip?key=$shodanKey", timeoutMillis = 12000)
+                when {
+                    r == null -> problems.add("Shodan: no response (timed out or unreachable).")
+                    r.code == 200 -> ExternalIntel.parseShodan(r.body)?.let { out.addAll(ExternalIntel.shodanFindings("", target, it)) }
+                    r.code == 404 -> out.add(Finding(title = "Shodan: no data for $ip", severity = Severity.INFO, source = FindingSource.NETWORK, scope = "", target = target, details = "Shodan has no record of this IP (not seen by its scanners).", remediation = "No action needed."))
+                    r.code == 401 -> problems.add("Shodan: API key rejected (401).")
+                    r.code == 429 -> problems.add("Shodan: rate-limited (429) — wait and retry.")
+                    else -> problems.add("Shodan: HTTP ${r.code}.")
+                }
+            }
         }
         if (vtKey.isNotBlank()) {
             val path = if (isIp) "ip_addresses/$host" else "domains/$host"
             val r = Http.get("https://www.virustotal.com/api/v3/$path", timeoutMillis = 12000, extraHeaders = mapOf("x-apikey" to vtKey))
-            if (r != null && r.code == 200) ExternalIntel.parseVirusTotal(r.body)?.let { out.add(ExternalIntel.vtFinding("", target, it)) }
+            when {
+                r == null -> problems.add("VirusTotal: no response (timed out or unreachable).")
+                r.code == 200 -> ExternalIntel.parseVirusTotal(r.body)?.let { out.add(ExternalIntel.vtFinding("", target, it)) }
+                r.code == 401 -> problems.add("VirusTotal: API key rejected (401).")
+                r.code == 404 -> problems.add("VirusTotal: $host not indexed (404).")
+                r.code == 429 -> problems.add("VirusTotal: rate-limited (429) — wait and retry.")
+                else -> problems.add("VirusTotal: HTTP ${r.code}.")
+            }
         }
 
-        if (out.isEmpty()) Result.failure(IllegalStateException("No external data returned (check the keys, or the target isn't indexed)."))
-        else Result.success(out)
+        if (out.isNotEmpty()) Result.success(out)
+        else if (problems.isNotEmpty()) Result.failure(IllegalStateException(problems.joinToString("\n")))
+        else Result.failure(IllegalStateException("No external data returned (the target isn't indexed)."))
     }
 
     // ---- SMB2 negotiate / signing posture (no auth, no share access) ----
@@ -366,28 +388,34 @@ object NetToolsNet {
         val clean = domain.trim().lowercase().removePrefix("http://").removePrefix("https://").substringBefore('/')
         if (!HOST_RE.matches(clean) || !clean.contains('.')) return@withContext Result.failure(IllegalArgumentException("Enter a domain name."))
 
-        // crt.sh is slow (queries often take 30s+) and returns large bodies, so give it a long read
-        // timeout and a high cap; parsing salvages a truncated body rather than failing.
-        val crt = Http.get(
-            CertSearch.crtShUrl(clean),
-            timeoutMillis = 15_000, readTimeoutMillis = 45_000,
-            maxBytes = 16 * 1024 * 1024,
-            extraHeaders = mapOf("Accept" to "application/json")
-        )
+        // Query both CT sources concurrently and union them — each indexes certificates the other misses.
+        // crt.sh is slow (30s+) and returns large bodies, so it gets a long read timeout and a high cap;
+        // parsing salvages a truncated/non-JSON body rather than failing.
+        val (crt, cs) = coroutineScope {
+            val crtD = async {
+                Http.get(
+                    CertSearch.crtShUrl(clean),
+                    timeoutMillis = 15_000, readTimeoutMillis = 45_000,
+                    maxBytes = 16 * 1024 * 1024,
+                    extraHeaders = mapOf("Accept" to "application/json")
+                )
+            }
+            val csD = async {
+                Http.get(
+                    CertSearch.certSpotterUrl(clean),
+                    timeoutMillis = 15_000, readTimeoutMillis = 30_000,
+                    maxBytes = 8 * 1024 * 1024,
+                    extraHeaders = mapOf("Accept" to "application/json")
+                )
+            }
+            crtD.await() to csD.await()
+        }
         val crtSubs = if (crt != null && crt.code in 200..299) CertSearch.parseSubdomains(crt.body, clean) else emptyList()
-        if (crtSubs.isNotEmpty()) return@withContext Result.success(resolveAndDescribe(crtSubs))
-
-        // Fallback: Certspotter (crt.sh was unreachable, errored, or returned nothing usable).
-        val cs = Http.get(
-            CertSearch.certSpotterUrl(clean),
-            timeoutMillis = 15_000, readTimeoutMillis = 30_000,
-            maxBytes = 8 * 1024 * 1024,
-            extraHeaders = mapOf("Accept" to "application/json")
-        )
         val csSubs = if (cs != null && cs.code in 200..299) CertSearch.parseCertSpotter(cs.body, clean) else emptyList()
-        if (csSubs.isNotEmpty()) return@withContext Result.success(resolveAndDescribe(csSubs))
+        val merged = CertSearch.sortHosts(crtSubs + csSubs)
+        if (merged.isNotEmpty()) return@withContext Result.success(resolveAndDescribe(merged))
 
-        // Nothing worked — explain why in a way that points at the real cause.
+        // Nothing usable — explain why in a way that points at the real cause.
         val reached = (crt != null && crt.code in 200..299) || (cs != null && cs.code in 200..299)
         val msg = when {
             reached -> "No subdomains found in CT logs for $clean."
@@ -413,8 +441,10 @@ object NetToolsNet {
                 }
             }
         }.awaitAll()
+        // Surface the security-relevant hosts first: internal-resolving ones, then the rest in order.
         // Names beyond the cap are listed unresolved so nothing from the CT logs is dropped.
-        resolved + names.drop(RESOLVE_CAP)
+        val (internal, rest) = resolved.partition { it.contains("[INTERNAL]") }
+        internal + rest + names.drop(RESOLVE_CAP)
     }
 
     // ---- public-IP exposure ----
