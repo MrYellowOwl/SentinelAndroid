@@ -52,6 +52,22 @@ class CertSearchTest {
         )
     }
 
+    @Test fun flagsSubdomainsResolvingToPrivateIps() {
+        assertTrue(CertSearch.hasInternalAddress(listOf("10.0.0.5")))
+        assertTrue(CertSearch.hasInternalAddress(listOf("93.184.216.34", "192.168.1.10")))
+        assertFalse(CertSearch.hasInternalAddress(listOf("93.184.216.34")))
+        assertFalse(CertSearch.hasInternalAddress(emptyList()))
+    }
+
+    @Test fun describesResolvedSubdomains() {
+        assertEquals("www.example.com → 93.184.216.34",
+            CertSearch.describeResolved("www.example.com", listOf("93.184.216.34")))
+        assertEquals("admin.example.com → 10.0.0.5  [INTERNAL]",
+            CertSearch.describeResolved("admin.example.com", listOf("10.0.0.5")))
+        assertEquals("stale.example.com",   // no A record -> name only
+            CertSearch.describeResolved("stale.example.com", emptyList()))
+    }
+
     @Test fun parsesCertSpotterDnsNames() {
         val json = """[
             {"dns_names":["example.com","www.example.com","*.example.com"]},

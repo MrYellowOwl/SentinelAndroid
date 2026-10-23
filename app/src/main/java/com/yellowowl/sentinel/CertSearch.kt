@@ -75,6 +75,18 @@ object CertSearch {
     private fun unescape(s: String): String =
         s.replace("\\n", "\n").replace("\\/", "/").replace("\\\"", "\"").replace("\\\\", "\\")
 
+    /** True if any resolved address is an RFC 1918 private IP (subdomain pointing at internal infrastructure). */
+    fun hasInternalAddress(ips: List<String>): Boolean =
+        ips.any { Ipv4.parse(it.trim())?.let(Ipv4::isPrivate) == true }
+
+    /** One output line for a subdomain: "name → ip[, ip]  [INTERNAL]", or just the name when it didn't resolve. */
+    fun describeResolved(name: String, ips: List<String>): String {
+        val addrs = ips.map { it.trim() }.filter { it.isNotEmpty() }
+        if (addrs.isEmpty()) return name
+        val tag = if (hasInternalAddress(addrs)) "  [INTERNAL]" else ""
+        return "$name → ${addrs.joinToString(", ")}$tag"
+    }
+
     private fun filterAndSort(names: List<String>, domain: String): List<String> {
         val base = domain.trim().lowercase().trimEnd('.')
         val found = LinkedHashSet<String>()

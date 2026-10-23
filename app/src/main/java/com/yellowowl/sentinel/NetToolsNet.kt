@@ -375,7 +375,7 @@ object NetToolsNet {
             extraHeaders = mapOf("Accept" to "application/json")
         )
         val crtSubs = if (crt != null && crt.code in 200..299) CertSearch.parseSubdomains(crt.body, clean) else emptyList()
-        if (crtSubs.isNotEmpty()) return@withContext Result.success(crtSubs)
+        if (crtSubs.isNotEmpty()) return@withContext Result.success(resolveAndDescribe(crtSubs))
 
         // Fallback: Certspotter (crt.sh was unreachable, errored, or returned nothing usable).
         val cs = Http.get(
@@ -385,7 +385,7 @@ object NetToolsNet {
             extraHeaders = mapOf("Accept" to "application/json")
         )
         val csSubs = if (cs != null && cs.code in 200..299) CertSearch.parseCertSpotter(cs.body, clean) else emptyList()
-        if (csSubs.isNotEmpty()) return@withContext Result.success(csSubs)
+        if (csSubs.isNotEmpty()) return@withContext Result.success(resolveAndDescribe(csSubs))
 
         // Nothing worked — explain why in a way that points at the real cause.
         val reached = (crt != null && crt.code in 200..299) || (cs != null && cs.code in 200..299)
@@ -396,6 +396,25 @@ object NetToolsNet {
             else -> "Couldn't reach the CT logs — crt.sh can be slow or briefly down. Try again in a moment."
         }
         Result.failure(IllegalStateException(msg))
+    }
+
+    private const val RESOLVE_CAP = 150   // bound the DNS fan-out for domains with huge CT footprints
+
+    /** Resolves each discovered subdomain (A records) concurrently and formats a line per host. */
+    private suspend fun resolveAndDescribe(names: List<String>): List<String> = coroutineScope {
+        val toResolve = names.take(RESOLVE_CAP)
+        val gate = Semaphore(24)
+        val resolved = toResolve.map { name ->
+            async {
+                gate.withPermit {
+                    val ips = runCatching { queryOne(name, "A", "8.8.8.8") }.getOrNull()
+                        ?.filter { it.type.equals("A", ignoreCase = true) }?.map { it.value }.orEmpty()
+                    CertSearch.describeResolved(name, ips)
+                }
+            }
+        }.awaitAll()
+        // Names beyond the cap are listed unresolved so nothing from the CT logs is dropped.
+        resolved + names.drop(RESOLVE_CAP)
     }
 
     // ---- public-IP exposure ----
