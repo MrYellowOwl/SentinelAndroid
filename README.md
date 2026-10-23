@@ -82,7 +82,7 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
-**1.18.0** — Fing-style per-network memory. Every network you scan is now saved separately and survives restarts: switch between saved networks, and each keeps its own device list with online/offline state and first-seen / last-seen times. Device entries show vendor, type, MAC, IP and open ports at a glance. This data is independent of Findings — clearing findings no longer touches it, and a network is only removed with the in-app **Forget** action.
+**1.18.1** — Fing-style per-network memory. Every network you scan is now saved separately and survives restarts: switch between saved networks, and each keeps its own device list with online/offline state and first-seen / last-seen times. Device entries show vendor, type, MAC, IP and open ports at a glance. This data is independent of Findings — clearing findings no longer touches it, and a network is only removed with the in-app **Forget** action.
 
 **1.17.0** — Layout cleanup. The Tools tab's utilities are grouped into collapsible categories — Reachability & Discovery, DNS & Domain, Service Assessment, Exposure & Intel, and Utilities — so it reads as a tidy menu instead of one long scroll. Card padding is now consistent across every screen (less cramped, more uniform), and the Findings screen's export controls are tidied into an even row.
 
