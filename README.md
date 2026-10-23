@@ -82,6 +82,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
+**1.18.6** — Network list polish. The device list is now a single clean card of flat rows with hairline dividers (Fing-style) instead of separate chunky cards, each row carries a device-type icon (router, printer, TV, camera, NAS, PC, phone, server, IoT…), and there are sort controls (IP, Name, Status) plus an "Online only" filter.
+
 **1.18.5** — Cleaner device list (Fing-style). Devices are now compact rows — icon with an online/offline dot, name and IP, vendor and status — with open ports shown as a risk-coloured count (full details on tap) instead of a stack of chips. Fixed a glitch where the gateway could appear twice (a live row plus a stale "offline" twin) when its MAC was recovered on one scan but not the next, and stopped `null` from leaking into device subtitles.
 
 **1.18.4** — Crash fix (root cause). A scan could record two devices under the same identity (e.g. one MAC seen on two IPs via the router's ARP table), which produced duplicate list keys and crashed the Network screen right after a scan. The merge now keeps one row per device, and existing saved data with duplicates is repaired on load — so networks saved before this fix open without crashing too.

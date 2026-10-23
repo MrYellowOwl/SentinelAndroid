@@ -41,6 +41,16 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Laptop
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -305,6 +315,9 @@ internal fun NetworkScreen(
     val selected = savedNetworks.firstOrNull { it.id == selectedId } ?: savedNetworks.firstOrNull { it.id == currentId }
     val isCurrent = selected == null || selected.id == currentId
     var forgetTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var onlineOnly by rememberSaveable { mutableStateOf(false) }
+    var sortOrdinal by rememberSaveable { mutableStateOf(0) }   // Int is always Bundle-savable
+    val sortMode = DeviceSort.entries.getOrElse(sortOrdinal) { DeviceSort.IP }
 
     forgetTarget?.let { id ->
         val net = savedNetworks.firstOrNull { it.id == id }
@@ -486,7 +499,6 @@ internal fun NetworkScreen(
         }
 
         if (selected != null) {
-            // Render the selected network's saved device list (rich info, online/offline, first/last seen).
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -506,10 +518,38 @@ internal fun NetworkScreen(
                     }
                 }
             }
-            items(selected.devices, key = { NetworkMerge.deviceKey(it.mac, it.ip) }) { d ->
-                // Only link to the live host detail when this device is part of the current scan.
-                val liveIp = if (isCurrent && state.devices.any { it.ipAddress == d.ip }) d.ip else null
-                SavedDeviceCard(d, nicknames, onClick = liveIp?.let { ip -> { onOpenHost(ip) } })
+            // Sort + filter controls.
+            item {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    DeviceSort.entries.forEach { mode ->
+                        SmallToggleChip(mode.label, sortMode == mode) { sortOrdinal = mode.ordinal }
+                    }
+                    SmallToggleChip("Online only", onlineOnly) { onlineOnly = !onlineOnly }
+                }
+            }
+            // One card holding the whole list, Fing-style flat rows with hairline dividers.
+            item {
+                val shown = selected.devices
+                    .filter { !onlineOnly || it.online }
+                    .sortedWith(
+                        when (sortMode) {
+                            DeviceSort.IP -> compareByDescending<SavedDevice> { it.isGateway }.thenBy { Ipv4.parse(it.ip) ?: Long.MAX_VALUE }
+                            DeviceSort.NAME -> compareBy { it.displayName.lowercase() }
+                            DeviceSort.STATUS -> compareByDescending<SavedDevice> { it.online }.thenByDescending { it.isGateway }.thenBy { Ipv4.parse(it.ip) ?: Long.MAX_VALUE }
+                        }
+                    )
+                SurfaceCard {
+                    Column(Modifier.fillMaxWidth()) {
+                        if (shown.isEmpty()) {
+                            Text("No devices match this filter.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(16.dp))
+                        }
+                        shown.forEachIndexed { i, d ->
+                            if (i > 0) HorizontalDivider(color = Border, modifier = Modifier.padding(start = 58.dp))
+                            val liveIp = if (isCurrent && state.devices.any { it.ipAddress == d.ip }) d.ip else null
+                            DeviceRow(d, nicknames, onClick = liveIp?.let { ip -> { onOpenHost(ip) } })
+                        }
+                    }
+                }
             }
         } else {
             item {
@@ -577,47 +617,79 @@ private fun DeviceCard(device: DeviceResult, nicknames: Map<String, String>, onC
     }
 }
 
+/** How the device list is ordered. */
+private enum class DeviceSort(val label: String) { IP("IP"), NAME("Name"), STATUS("Status") }
+
+/** Picks a device-type icon from the inferred kind (falls back to a generic device). */
+private fun deviceIcon(d: SavedDevice): ImageVector {
+    if (d.isGateway) return Icons.Filled.Router
+    val k = d.kind?.lowercase() ?: return Icons.Filled.Devices
+    return when {
+        "router" in k || "network gear" in k || "gateway" in k -> Icons.Filled.Router
+        "printer" in k -> Icons.Filled.Print
+        "camera" in k -> Icons.Filled.Videocam
+        "tv" in k || "media" in k -> Icons.Filled.Tv
+        "nas" in k || "file share" in k -> Icons.Filled.Storage
+        "windows" in k || "pc" in k -> Icons.Filled.Computer
+        "server" in k || "web host" in k -> Icons.Filled.Public
+        "phone" in k || "consumer" in k -> Icons.Filled.PhoneAndroid
+        "smart home" in k -> Icons.Filled.Home
+        "raspberry" in k || "iot" in k || "esp" in k -> Icons.Filled.Memory
+        "apple" in k || "laptop" in k -> Icons.Filled.Laptop
+        else -> Icons.Filled.Devices
+    }
+}
+
+/** A small selectable chip used for the sort/filter controls. */
 @Composable
-private fun SavedDeviceCard(d: SavedDevice, nicknames: Map<String, String>, onClick: (() -> Unit)?) {
+private fun SmallToggleChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label, fontSize = 11.sp) },
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = SurfaceRaised, labelColor = TextMuted,
+            selectedContainerColor = Accent.copy(alpha = 0.18f), selectedLabelColor = Accent
+        ),
+        border = FilterChipDefaults.filterChipBorder(enabled = true, selected = selected, borderColor = Border, selectedBorderColor = Accent.copy(alpha = 0.6f))
+    )
+}
+
+/** One flat, Fing-style device row (no card of its own; the list shares one card with dividers). */
+@Composable
+private fun DeviceRow(d: SavedDevice, nicknames: Map<String, String>, onClick: (() -> Unit)?) {
     fun clean(s: String?) = s?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-    val nick = clean(nicknames[Nicknames.keyFor(d.mac, d.ip)])
-    val name = nick ?: d.displayName
+    val name = clean(nicknames[Nicknames.keyFor(d.mac, d.ip)]) ?: d.displayName
     val dotColor = if (d.online) Accent else TextMuted
-    SurfaceCard(onClick = onClick) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
-                val icon = when {
-                    d.isGateway -> Icons.Filled.Router
-                    d.kind?.contains("phone", ignoreCase = true) == true -> Icons.Filled.PhoneAndroid
-                    else -> Icons.Filled.Devices
-                }
-                Icon(icon, contentDescription = null, tint = if (d.online) Accent else TextMuted, modifier = Modifier.size(24.dp))
-                Box(Modifier.align(Alignment.BottomEnd).size(9.dp).background(dotColor, CircleShape))
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(name, color = if (d.online) TextMain else TextMuted, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val meta = listOfNotNull(d.ip.takeIf { it != name }, clean(d.kind)).joinToString(" · ")
-                if (meta.isNotEmpty()) Text(meta, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                if (d.openPorts.isNotEmpty()) {
-                    val sev = d.openPorts.mapNotNull { PortCatalog.riskFor(it)?.severity }.maxByOrNull { it.rank }
-                    Text(
-                        "${d.openPorts.size} open port${if (d.openPorts.size == 1) "" else "s"}",
-                        color = sev?.color() ?: TextMuted, fontSize = 11.sp
-                    )
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                clean(d.vendor)?.let { Text(it, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1) }
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+        .padding(horizontal = 14.dp, vertical = 12.dp)
+    Row(rowModifier, verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
+            Icon(deviceIcon(d), contentDescription = null, tint = if (d.online) Accent else TextMuted, modifier = Modifier.size(24.dp))
+            Box(Modifier.align(Alignment.BottomEnd).size(9.dp).background(dotColor, CircleShape))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(name, color = if (d.online) TextMain else TextMuted, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val meta = listOfNotNull(d.ip.takeIf { it != name }, clean(d.kind)).joinToString(" · ")
+            if (meta.isNotEmpty()) Text(meta, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (d.openPorts.isNotEmpty()) {
+                val sev = d.openPorts.mapNotNull { PortCatalog.riskFor(it)?.severity }.maxByOrNull { it.rank }
                 Text(
-                    if (d.online) "Online" else "Seen ${DateUtils.getRelativeTimeSpanString(d.lastSeen)}",
-                    color = if (d.online) Accent else TextMuted, fontSize = 11.sp, maxLines = 1
+                    "${d.openPorts.size} open port${if (d.openPorts.size == 1) "" else "s"}",
+                    color = sev?.color() ?: TextMuted, fontSize = 11.sp
                 )
             }
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            clean(d.vendor)?.let { Text(it, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1) }
+            Text(
+                if (d.online) "Online" else "Seen ${DateUtils.getRelativeTimeSpanString(d.lastSeen)}",
+                color = if (d.online) Accent else TextMuted, fontSize = 11.sp, maxLines = 1
+            )
         }
     }
 }
