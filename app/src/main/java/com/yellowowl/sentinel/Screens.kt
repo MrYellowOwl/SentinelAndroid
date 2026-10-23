@@ -506,7 +506,7 @@ internal fun NetworkScreen(
                     }
                 }
             }
-            items(selected.devices, key = { it.ip }) { d ->
+            items(selected.devices, key = { NetworkMerge.deviceKey(it.mac, it.ip) }) { d ->
                 // Only link to the live host detail when this device is part of the current scan.
                 val liveIp = if (isCurrent && state.devices.any { it.ipAddress == d.ip }) d.ip else null
                 SavedDeviceCard(d, nicknames, onClick = liveIp?.let { ip -> { onOpenHost(ip) } })

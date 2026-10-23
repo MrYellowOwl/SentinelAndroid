@@ -82,6 +82,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
+**1.18.3** — Crash fix: the Network screen could crash when a saved network held two devices sharing an IP address (an offline device whose address was later reused by a new one), because the device list keyed its rows by IP. Rows are now keyed by a unique device identity.
+
 **1.18.2** — Better hostname resolution. The scanner now asks the router's own DNS (PTR / in-addr.arpa) for each host's name before falling back to Android's resolver — home routers (dnsmasq and friends) name their DHCP clients, so far more devices show a real name instead of a bare IP. Names are also tidied (trailing dot and noisy `.lan`/`.home`/`.local` suffixes removed).
 
 **1.18.1** — Fing-style per-network memory. Every network you scan is now saved separately and survives restarts: switch between saved networks, and each keeps its own device list with online/offline state and first-seen / last-seen times. Device entries show vendor, type, MAC, IP and open ports at a glance. This data is independent of Findings — clearing findings no longer touches it, and a network is only removed with the in-app **Forget** action.
