@@ -361,16 +361,41 @@ object NetToolsNet {
         }
     }
 
-    // ---- CT-log subdomain discovery (crt.sh) ----
+    // ---- CT-log subdomain discovery (crt.sh, with a Certspotter fallback) ----
     suspend fun subdomains(domain: String): Result<List<String>> = withContext(Dispatchers.IO) {
         val clean = domain.trim().lowercase().removePrefix("http://").removePrefix("https://").substringBefore('/')
         if (!HOST_RE.matches(clean) || !clean.contains('.')) return@withContext Result.failure(IllegalArgumentException("Enter a domain name."))
-        val resp = Http.get(CertSearch.crtShUrl(clean), timeoutMillis = 15000, maxBytes = 4 * 1024 * 1024)
-            ?: return@withContext Result.failure(IllegalStateException("Couldn't reach crt.sh. It can be slow — try again."))
-        if (resp.code !in 200..299) return@withContext Result.failure(IllegalStateException("crt.sh returned HTTP ${resp.code}."))
-        val subs = CertSearch.parseSubdomains(resp.body, clean)
-        if (subs.isEmpty()) Result.failure(IllegalStateException("No subdomains found in CT logs for $clean."))
-        else Result.success(subs)
+
+        // crt.sh is slow (queries often take 30s+) and returns large bodies, so give it a long read
+        // timeout and a high cap; parsing salvages a truncated body rather than failing.
+        val crt = Http.get(
+            CertSearch.crtShUrl(clean),
+            timeoutMillis = 15_000, readTimeoutMillis = 45_000,
+            maxBytes = 16 * 1024 * 1024,
+            extraHeaders = mapOf("Accept" to "application/json")
+        )
+        val crtSubs = if (crt != null && crt.code in 200..299) CertSearch.parseSubdomains(crt.body, clean) else emptyList()
+        if (crtSubs.isNotEmpty()) return@withContext Result.success(crtSubs)
+
+        // Fallback: Certspotter (crt.sh was unreachable, errored, or returned nothing usable).
+        val cs = Http.get(
+            CertSearch.certSpotterUrl(clean),
+            timeoutMillis = 15_000, readTimeoutMillis = 30_000,
+            maxBytes = 8 * 1024 * 1024,
+            extraHeaders = mapOf("Accept" to "application/json")
+        )
+        val csSubs = if (cs != null && cs.code in 200..299) CertSearch.parseCertSpotter(cs.body, clean) else emptyList()
+        if (csSubs.isNotEmpty()) return@withContext Result.success(csSubs)
+
+        // Nothing worked — explain why in a way that points at the real cause.
+        val reached = (crt != null && crt.code in 200..299) || (cs != null && cs.code in 200..299)
+        val msg = when {
+            reached -> "No subdomains found in CT logs for $clean."
+            crt?.code == 429 || cs?.code == 429 -> "CT-log lookup was rate-limited. Wait a minute and try again."
+            crt != null -> "crt.sh returned HTTP ${crt.code} and the fallback didn't answer. Try again shortly."
+            else -> "Couldn't reach the CT logs — crt.sh can be slow or briefly down. Try again in a moment."
+        }
+        Result.failure(IllegalStateException(msg))
     }
 
     // ---- public-IP exposure ----

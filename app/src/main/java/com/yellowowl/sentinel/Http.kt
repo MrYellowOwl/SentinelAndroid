@@ -24,14 +24,15 @@ object Http {
         timeoutMillis: Int = 8_000,
         maxBytes: Int = 512 * 1024,
         followRedirects: Boolean = true,
-        extraHeaders: Map<String, String> = emptyMap()
+        extraHeaders: Map<String, String> = emptyMap(),
+        readTimeoutMillis: Int = timeoutMillis
     ): Result? = withContext(Dispatchers.IO) {
         var current = runCatching { URI(urlString).toURL() }.getOrNull() ?: return@withContext null
         repeat(WebChecks.MAX_REDIRECTS + 1) {
             val connection = runCatching { current.openConnection() as HttpURLConnection }.getOrNull() ?: return@withContext null
             try {
                 connection.connectTimeout = timeoutMillis
-                connection.readTimeout = timeoutMillis
+                connection.readTimeout = readTimeoutMillis
                 connection.instanceFollowRedirects = false
                 connection.requestMethod = "GET"
                 connection.useCaches = false

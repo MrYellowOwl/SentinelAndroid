@@ -1289,7 +1289,7 @@ private fun SubdomainTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from public Certificate Transparency logs (crt.sh). Read-only — it never touches the target.") {
+    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from public Certificate Transparency logs (crt.sh, with a Certspotter fallback). Read-only — it never touches the target.") {
         ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
         RunButton(if (busy) "Searching…" else "Find subdomains", !busy && domain.isNotBlank(), run)
         if (!busy && !err && count > 0) Text("$count subdomain(s) found", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
