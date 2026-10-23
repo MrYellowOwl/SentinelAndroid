@@ -197,7 +197,7 @@ internal fun DashboardScreen(
         ToolCard(
             title = "Website audit",
             subtitle = "Check HTTPS, certificate expiry, security headers and cookies.",
-            icon = Icons.Filled.Computerguage,
+            icon = Icons.Filled.Language,
             onClick = { onOpen(AppScreen.Website) }
         )
         ToolCard(
@@ -364,7 +364,7 @@ internal fun NetworkScreen(
                         )
                     } else if (state.checked) {
                         Row(verticalAlignment = Alignment.Top) {
-                            Icon(Icons.Filled.RouterOff, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Filled.WifiOff, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 "Connect to a private Wi-Fi or Ethernet network, then tap refresh. Mobile data and public addresses can't be scanned.",
@@ -725,7 +725,7 @@ internal fun WebsiteAuditScreen(
                     enabled = !state.busy,
                     label = { Text("Website address") },
                     placeholder = { Text("yourdomain.com") },
-                    leadingIcon = { Icon(Icons.Filled.Computerguage, contentDescription = null) },
+                    leadingIcon = { Icon(Icons.Filled.Language, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false),
                     keyboardActions = KeyboardActions(onGo = { run() })
                 )
@@ -1531,7 +1531,7 @@ private fun SubdomainTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from CT logs (crt.sh + Certspotter). Read-only — never touches the target.", Icons.Filled.Computerguage) {
+    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from CT logs (crt.sh + Certspotter). Read-only — never touches the target.", Icons.Filled.Language) {
         ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
         RunButton(if (busy) "Searching…" else "Find subdomains", !busy && domain.isNotBlank(), run)
         if (!busy && !err && count > 0) Text("$count subdomain(s) found", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
