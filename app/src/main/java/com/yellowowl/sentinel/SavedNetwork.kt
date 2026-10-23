@@ -68,17 +68,21 @@ object NetworkMerge {
         scanned: List<SavedDevice>,
         now: Long
     ): SavedNetwork {
-        val priorByKey = prior?.devices?.associateBy { keyOf(it) }.orEmpty()
-        val seenKeys = HashSet<String>()
-        val merged = ArrayList<SavedDevice>(scanned.size + priorByKey.size)
+        val priorDevices = prior?.devices.orEmpty()
+        val priorByKey = priorDevices.associateBy { keyOf(it) }
+        val merged = ArrayList<SavedDevice>(scanned.size + priorDevices.size)
+        val seenKeys = HashSet<String>()      // scanned identities already taken (dedupe within a scan)
+        val consumed = HashSet<String>()      // prior entries matched to a scanned device
 
         for (d in scanned) {
             val key = keyOf(d)
-            // Dedupe within a single scan: the same device can surface on two IPs (e.g. the gateway's
-            // ARP table reporting one MAC for several addresses), and two rows sharing an identity key
-            // would collide as a list key in the UI. Keep the first; skip the rest.
+            // Dedupe within a single scan: the gateway's ARP table can report one MAC on several IPs,
+            // so the same identity appears twice; keep the first.
             if (!seenKeys.add(key)) continue
-            val was = priorByKey[key]
+            // Match the prior record by identity, else by IP — so a device that gains or loses its MAC
+            // between scans (intermittent SNMP/ARP recovery) updates its row instead of spawning a twin.
+            val was = priorByKey[key] ?: priorDevices.firstOrNull { it.ip == d.ip && keyOf(it) !in consumed }
+            if (was != null) consumed.add(keyOf(was))
             merged.add(
                 d.copy(
                     firstSeen = was?.firstSeen?.takeIf { it > 0 } ?: now,
@@ -87,9 +91,12 @@ object NetworkMerge {
                 )
             )
         }
-        // Keep devices from past scans that didn't answer this time, marked offline.
-        for ((key, old) in priorByKey) {
-            if (key !in seenKeys) merged.add(old.copy(online = false))
+        // Keep past devices that didn't answer this time as offline — unless a live device now holds
+        // that IP (that would be a stale twin of the same host), in which case drop it.
+        val onlineIps = merged.mapTo(HashSet()) { it.ip }
+        for (p in priorDevices) {
+            if (keyOf(p) in consumed || p.ip in onlineIps) continue
+            merged.add(p.copy(online = false))
         }
         // Gateway first, then online before offline, then by numeric IP for a stable order.
         merged.sortWith(

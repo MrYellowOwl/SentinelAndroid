@@ -77,6 +77,23 @@ class SavedNetworkTest {
         assertEquals(2, net.deviceCount)                   // one per identity
     }
 
+    @Test fun deviceGainingOrLosingMacDoesNotDuplicate() {
+        // Scan 1: gateway known by MAC. Scan 2: same gateway IP but SNMP/ARP didn't return the MAC.
+        val s1 = NetworkMerge.mergeScan(
+            null, "net1", "Home", null, null, "10.0.0.0/24", "10.0.0.1", null,
+            listOf(dev("10.0.0.1", "aa:aa:aa:aa:aa:aa", gw = true)), now = 1000L
+        )
+        val s2 = NetworkMerge.mergeScan(
+            s1, "net1", "Home", null, null, "10.0.0.0/24", "10.0.0.1", null,
+            listOf(dev("10.0.0.1", null, gw = true)), now = 5000L   // same IP, no MAC this time
+        )
+        assertEquals(1, s2.deviceCount)                  // one gateway, not a live + stale twin
+        assertEquals(1, s2.onlineCount)
+        assertEquals(1000L, s2.devices.single().firstSeen)   // history preserved across the flip
+        val keys = s2.devices.map { NetworkMerge.deviceKey(it.mac, it.ip) }
+        assertEquals(keys.distinct(), keys)
+    }
+
     @Test fun codecRoundTrips() {
         val net = NetworkMerge.mergeScan(
             null, "net1", "Home", "Home", "bssid-1", "192.168.1.0/24", "192.168.1.1", "WPA2",

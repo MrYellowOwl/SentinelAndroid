@@ -579,38 +579,45 @@ private fun DeviceCard(device: DeviceResult, nicknames: Map<String, String>, onC
 
 @Composable
 private fun SavedDeviceCard(d: SavedDevice, nicknames: Map<String, String>, onClick: (() -> Unit)?) {
-    val nick = nicknames[Nicknames.keyFor(d.mac, d.ip)]?.takeIf { it.isNotBlank() }
+    fun clean(s: String?) = s?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+    val nick = clean(nicknames[Nicknames.keyFor(d.mac, d.ip)])
     val name = nick ?: d.displayName
+    val dotColor = if (d.online) Accent else TextMuted
     SurfaceCard(onClick = onClick) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val icon = if (d.isGateway) Icons.Filled.Router else Icons.Filled.Devices
-                Icon(icon, contentDescription = null, tint = if (d.online) Accent else TextMuted, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(name, color = if (d.online) TextMain else TextMuted, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    val sub = listOfNotNull(d.ip.takeIf { it != name }, d.vendor, d.kind, d.mac)
-                    if (sub.isNotEmpty()) Text(sub.joinToString(" · "), color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
+                val icon = when {
+                    d.isGateway -> Icons.Filled.Router
+                    d.kind?.contains("phone", ignoreCase = true) == true -> Icons.Filled.PhoneAndroid
+                    else -> Icons.Filled.Devices
                 }
-                Tag(if (d.online) "Online" else "Offline")
+                Icon(icon, contentDescription = null, tint = if (d.online) Accent else TextMuted, modifier = Modifier.size(24.dp))
+                Box(Modifier.align(Alignment.BottomEnd).size(9.dp).background(dotColor, CircleShape))
             }
-            if (d.openPorts.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    d.openPorts.forEach { port ->
-                        val tint = PortCatalog.riskFor(port)?.severity?.color() ?: TextMuted
-                        Box(Modifier.background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 5.dp)) {
-                            Text("${PortCatalog.serviceName(port)} · $port", color = tint, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(name, color = if (d.online) TextMain else TextMuted, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val meta = listOfNotNull(d.ip.takeIf { it != name }, clean(d.kind)).joinToString(" · ")
+                if (meta.isNotEmpty()) Text(meta, color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (d.openPorts.isNotEmpty()) {
+                    val sev = d.openPorts.mapNotNull { PortCatalog.riskFor(it)?.severity }.maxByOrNull { it.rank }
+                    Text(
+                        "${d.openPorts.size} open port${if (d.openPorts.size == 1) "" else "s"}",
+                        color = sev?.color() ?: TextMuted, fontSize = 11.sp
+                    )
                 }
             }
-            Text(
-                buildString {
-                    append(if (d.online) "Online now" else "Last seen ${DateUtils.getRelativeTimeSpanString(d.lastSeen)}")
-                    if (d.firstSeen > 0) append(" · first seen ${DateUtils.getRelativeTimeSpanString(d.firstSeen)}")
-                },
-                color = TextMuted, fontSize = 11.sp
-            )
+            Spacer(Modifier.width(8.dp))
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                clean(d.vendor)?.let { Text(it, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1) }
+                Text(
+                    if (d.online) "Online" else "Seen ${DateUtils.getRelativeTimeSpanString(d.lastSeen)}",
+                    color = if (d.online) Accent else TextMuted, fontSize = 11.sp, maxLines = 1
+                )
+            }
         }
     }
 }
