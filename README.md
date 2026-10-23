@@ -82,6 +82,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
+**1.18.0** — Fing-style per-network memory. Every network you scan is now saved separately and survives restarts: switch between saved networks, and each keeps its own device list with online/offline state and first-seen / last-seen times. Device entries show vendor, type, MAC, IP and open ports at a glance. This data is independent of Findings — clearing findings no longer touches it, and a network is only removed with the in-app **Forget** action.
+
 **1.17.0** — Layout cleanup. The Tools tab's utilities are grouped into collapsible categories — Reachability & Discovery, DNS & Domain, Service Assessment, Exposure & Intel, and Utilities — so it reads as a tidy menu instead of one long scroll. Card padding is now consistent across every screen (less cramped, more uniform), and the Findings screen's export controls are tidied into an even row.
 
 **1.16.0** — Broader, more reliable passive recon. The subdomain finder now queries crt.sh and Certspotter together and unions the results (each indexes certificates the other misses), with internal-resolving hosts listed first. The external-intel tool now works on domains as well as IPs (it resolves the domain for Shodan) and reports precisely why a lookup came back empty — bad key (401), rate limit (429), not indexed (404), or unreachable — instead of a single vague message. The website audit adds a dangerous-HTTP-methods check (read via OPTIONS, never exercised): it flags TRACE/TRACK (Cross-Site Tracing) and advertised PUT/DELETE/PATCH/CONNECT.

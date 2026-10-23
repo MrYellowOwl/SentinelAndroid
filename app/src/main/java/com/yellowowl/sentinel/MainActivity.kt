@@ -97,6 +97,7 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
     val appUpdate by vm.appUpdate.collectAsState()
     val scanSchedule by vm.scanSchedule.collectAsState()
     val history by vm.history.collectAsState()
+    val savedNetworks by vm.savedNetworks.collectAsState()
     val nicknames by vm.nicknames.collectAsState()
     val scopeText by vm.scopeText.collectAsState()
     val shodanKey by vm.shodanKey.collectAsState()
@@ -283,6 +284,8 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onSetProfile = vm::setScanProfile,
                 monitoring = monitoring,
                 nicknames = nicknames,
+                savedNetworks = savedNetworks,
+                onForgetNetwork = vm::forgetNetwork,
                 onMonitorChange = { enable ->
                     if (!vm.setMonitoring(enable) && enable) {
                         Toast.makeText(context, "Scan and confirm authorization first, then enable monitoring.", Toast.LENGTH_LONG).show()

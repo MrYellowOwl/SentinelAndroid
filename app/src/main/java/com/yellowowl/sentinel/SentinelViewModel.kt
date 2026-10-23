@@ -130,6 +130,10 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
     val history: StateFlow<List<HistoryEntry>> = HistoryStore.entries
     fun clearHistory() = HistoryStore.clear(app)
 
+    // ---- Saved networks (per-network scan memory; independent of Findings) ----
+    val savedNetworks: StateFlow<List<SavedNetwork>> = NetworkStore.networks
+    fun forgetNetwork(id: String) = NetworkStore.remove(app, id)
+
     // ---- Scheduled scans ----
     private val _scanSchedule = MutableStateFlow(SentinelSettings.scanSchedule(application))
     val scanSchedule: StateFlow<ScanSchedule> = _scanSchedule.asStateFlow()

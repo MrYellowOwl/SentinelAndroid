@@ -22,8 +22,8 @@ android {
         applicationId = "com.yellowowl.sentinel"
         minSdk = 26
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.17.0"
+        versionCode = 21
+        versionName = "1.18.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -288,11 +288,35 @@ internal fun NetworkScreen(
     monitoring: Boolean,
     onMonitorChange: (Boolean) -> Unit,
     nicknames: Map<String, String>,
+    savedNetworks: List<SavedNetwork> = emptyList(),
+    onForgetNetwork: (String) -> Unit = {},
     onOpenHost: (String) -> Unit,
     onViewFindings: () -> Unit
 ) {
     LaunchedEffect(Unit) { onAppear() }
     val range = state.range
+
+    // The saved network that matches what we're connected to now (best-effort by subnet/gateway).
+    val currentId = remember(savedNetworks, range) {
+        savedNetworks.firstOrNull { it.cidr != null && it.cidr == range?.cidr }?.id
+            ?: savedNetworks.firstOrNull()?.id
+    }
+    var selectedId by rememberSaveable(currentId) { mutableStateOf(currentId) }
+    val selected = savedNetworks.firstOrNull { it.id == selectedId } ?: savedNetworks.firstOrNull { it.id == currentId }
+    val isCurrent = selected == null || selected.id == currentId
+    var forgetTarget by rememberSaveable { mutableStateOf<String?>(null) }
+
+    forgetTarget?.let { id ->
+        val net = savedNetworks.firstOrNull { it.id == id }
+        AlertDialog(
+            onDismissRequest = { forgetTarget = null },
+            title = { Text("Forget this network?") },
+            text = { Text("Removes the saved device list for \"${net?.label ?: "this network"}\". Findings are not affected. You can rescan to rebuild it.") },
+            confirmButton = { TextButton(onClick = { forgetTarget = null; onForgetNetwork(id) }) { Text("Forget", color = HighColor) } },
+            dismissButton = { TextButton(onClick = { forgetTarget = null }) { Text("Cancel") } },
+            containerColor = SurfaceColor
+        )
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -438,19 +462,70 @@ internal fun NetworkScreen(
                 }
             }
         }
-        item {
-            Column {
-                Eyebrow("DEVICES · ${state.devices.size}")
-                if (state.devices.isEmpty() && !state.scanning) {
-                    Text(
-                        if (state.lastResult == null) "Devices will appear here after a scan. Some devices ignore all connection attempts and may not be listed."
-                        else "No devices answered. Some devices ignore all connection attempts.",
-                        color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp)
-                    )
+        // Saved-networks switcher: pick any network you've scanned before (survives restarts).
+        if (savedNetworks.size > 1) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Eyebrow("SAVED NETWORKS · ${savedNetworks.size}")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        savedNetworks.forEach { net ->
+                            FilterChip(
+                                selected = net.id == selected?.id,
+                                onClick = { selectedId = net.id },
+                                label = { Text("${net.label} · ${net.onlineCount}/${net.deviceCount}", fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = SurfaceRaised, labelColor = TextMuted,
+                                    selectedContainerColor = Accent.copy(alpha = 0.18f), selectedLabelColor = Accent
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(enabled = true, selected = net.id == selected?.id, borderColor = Border, selectedBorderColor = Accent.copy(alpha = 0.6f))
+                            )
+                        }
+                    }
                 }
             }
         }
-        items(state.devices, key = { it.ipAddress }) { device -> DeviceCard(device, nicknames) { onOpenHost(device.ipAddress) } }
+
+        if (selected != null) {
+            // Render the selected network's saved device list (rich info, online/offline, first/last seen).
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Eyebrow("DEVICES · ${selected.onlineCount} online / ${selected.deviceCount} known")
+                        Text(
+                            buildString {
+                                append(if (isCurrent) "This network" else selected.label)
+                                append(" · last scan ")
+                                append(DateUtils.getRelativeTimeSpanString(selected.lastSeen))
+                            },
+                            color = TextMuted, fontSize = 12.sp
+                        )
+                    }
+                    TextButton(onClick = { forgetTarget = selected.id }) {
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp)); Text("Forget", color = TextMuted, fontSize = 13.sp)
+                    }
+                }
+            }
+            items(selected.devices, key = { it.ip }) { d ->
+                // Only link to the live host detail when this device is part of the current scan.
+                val liveIp = if (isCurrent && state.devices.any { it.ipAddress == d.ip }) d.ip else null
+                SavedDeviceCard(d, nicknames, onClick = liveIp?.let { ip -> { onOpenHost(ip) } })
+            }
+        } else {
+            item {
+                Column {
+                    Eyebrow("DEVICES · ${state.devices.size}")
+                    if (state.devices.isEmpty() && !state.scanning) {
+                        Text(
+                            if (state.lastResult == null) "Devices will appear here after a scan. Some devices ignore all connection attempts and may not be listed."
+                            else "No devices answered. Some devices ignore all connection attempts.",
+                            color = TextMuted, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+            }
+            items(state.devices, key = { it.ipAddress }) { device -> DeviceCard(device, nicknames) { onOpenHost(device.ipAddress) } }
+        }
     }
 }
 
@@ -498,6 +573,44 @@ private fun DeviceCard(device: DeviceResult, nicknames: Map<String, String>, onC
                     Text(versions.joinToString(" · "), color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SavedDeviceCard(d: SavedDevice, nicknames: Map<String, String>, onClick: (() -> Unit)?) {
+    val nick = nicknames[Nicknames.keyFor(d.mac, d.ip)]?.takeIf { it.isNotBlank() }
+    val name = nick ?: d.displayName
+    SurfaceCard(onClick = onClick) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val icon = if (d.isGateway) Icons.Filled.Router else Icons.Filled.Devices
+                Icon(icon, contentDescription = null, tint = if (d.online) Accent else TextMuted, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(name, color = if (d.online) TextMain else TextMuted, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val sub = listOfNotNull(d.ip.takeIf { it != name }, d.vendor, d.kind, d.mac)
+                    if (sub.isNotEmpty()) Text(sub.joinToString(" · "), color = TextMuted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Tag(if (d.online) "Online" else "Offline")
+            }
+            if (d.openPorts.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    d.openPorts.forEach { port ->
+                        val tint = PortCatalog.riskFor(port)?.severity?.color() ?: TextMuted
+                        Box(Modifier.background(SurfaceRaised, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 5.dp)) {
+                            Text("${PortCatalog.serviceName(port)} · $port", color = tint, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+            Text(
+                buildString {
+                    append(if (d.online) "Online now" else "Last seen ${DateUtils.getRelativeTimeSpanString(d.lastSeen)}")
+                    if (d.firstSeen > 0) append(" · first seen ${DateUtils.getRelativeTimeSpanString(d.firstSeen)}")
+                },
+                color = TextMuted, fontSize = 11.sp
+            )
         }
     }
 }
