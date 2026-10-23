@@ -1326,9 +1326,9 @@ private fun ToolSection(
 @Composable
 private fun ToolCard(title: String, description: String, content: @Composable ColumnScope.() -> Unit) {
     SurfaceCard {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Eyebrow(title)
-            Text(description, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+            Text(description, color = TextMuted, fontSize = 12.sp, lineHeight = 15.sp)
             content()
         }
     }
@@ -1525,7 +1525,7 @@ private fun SubdomainTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from public Certificate Transparency logs (crt.sh, with a Certspotter fallback). Read-only — it never touches the target.") {
+    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from CT logs (crt.sh + Certspotter). Read-only — never touches the target.") {
         ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
         RunButton(if (busy) "Searching…" else "Find subdomains", !busy && domain.isNotBlank(), run)
         if (!busy && !err && count > 0) Text("$count subdomain(s) found", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1669,7 +1669,7 @@ private fun ExposureTool(onCopy: (String) -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<NetToolsNet.ExposureResult?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
-    ToolCard("PUBLIC IP & EXPOSURE", "Shows your internet-facing IP, ISP/ASN and whether common inbound ports answer from outside.") {
+    ToolCard("PUBLIC IP & EXPOSURE", "Your internet-facing IP and ISP/ASN, and which inbound ports answer from outside.") {
         RunButton(if (busy) "Checking…" else "Check my exposure", !busy) {
             busy = true; result = null; err = null
             scope.launch {

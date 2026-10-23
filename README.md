@@ -82,7 +82,7 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
-**1.18.7** — More device names. Added reverse mDNS (multicast `in-addr.arpa`) to the name lookup: Apple, smart-TV and IoT devices answer this with their `.local` name even when the router serves no reverse DNS (common on Docsis/cable gateways), so fewer devices show up as bare IPs. Lookup order is now router DNS → reverse mDNS → system resolver, on top of the existing mDNS/NetBIOS/SSDP discovery names.
+**1.18.7** — More device names, and a Tools-tab tidy. Added reverse mDNS (multicast `in-addr.arpa`) to the name lookup: Apple, smart-TV and IoT devices answer this with their `.local` name even when the router serves no reverse DNS (common on Docsis/cable gateways), so fewer devices show up as bare IPs. Lookup order is now router DNS → reverse mDNS → system resolver, on top of the existing mDNS/NetBIOS/SSDP discovery names. The Tools cards are also a touch tighter and their descriptions trimmed for a cleaner, more consistent feel.
 
 **1.18.6** — Network list polish. The device list is now a single clean card of flat rows with hairline dividers (Fing-style) instead of separate chunky cards, each row carries a device-type icon (router, printer, TV, camera, NAS, PC, phone, server, IoT…), and there are sort controls (IP, Name, Status) plus an "Online only" filter.
 
