@@ -32,6 +32,12 @@ object Ipv4 {
     fun format(value: Long): String = listOf(24, 16, 8, 0)
         .joinToString(".") { shift -> ((value shr shift) and 0xFF).toString() }
 
+    /** The in-addr.arpa PTR name for a dotted IPv4, e.g. 192.168.1.5 → 5.1.168.192.in-addr.arpa. */
+    fun reverseDnsName(ip: String): String? {
+        val v = parse(ip) ?: return null
+        return (0..3).joinToString(".") { i -> ((v shr (8 * i)) and 0xFF).toString() } + ".in-addr.arpa"
+    }
+
     /** RFC 1918 private ranges: 10/8, 172.16/12, 192.168/16. */
     fun isPrivate(value: Long): Boolean =
         value in 0x0A000000L..0x0AFFFFFFL ||

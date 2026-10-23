@@ -137,7 +137,7 @@ object NetworkScanner {
                     DeviceResult(
                         ipAddress = ip,
                         openPorts = open,
-                        hostname = if (identity?.name == null) lookupName(ip) else null,
+                        hostname = if (identity?.name == null) lookupName(ip, range.gatewayIp) else null,
                         identity = identity,
                         isThisDevice = ip == range.phoneIp,
                         isGateway = ip == range.gatewayIp
@@ -179,7 +179,7 @@ object NetworkScanner {
         DeviceResult(
             ipAddress = ip,
             openPorts = open,
-            hostname = if (identity?.name == null) lookupName(ip) else null,
+            hostname = if (identity?.name == null) lookupName(ip, range.gatewayIp) else null,
             identity = identity,
             isThisDevice = ip == range.phoneIp,
             isGateway = ip == range.gatewayIp
@@ -214,12 +214,27 @@ object NetworkScanner {
     /** Reverse DNS can block for seconds and can't be interrupted, so it runs detached and we stop waiting after a timeout. */
     private val lookupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private suspend fun lookupName(ip: String): String? {
+    private suspend fun lookupName(ip: String, resolver: String?): String? {
         val address = Ipv4.parse(ip) ?: return null
+        // First ask the router's DNS directly (dnsmasq usually knows its DHCP clients by name);
+        // Android's own resolver typically returns the IP unchanged for LAN hosts.
+        if (resolver != null) {
+            runCatching { NetToolsNet.reverseDns(ip, resolver) }.getOrNull()
+                ?.takeIf { it != ip }
+                ?.let { return cleanName(it) }
+        }
         val lookup = lookupScope.async {
             runCatching { InetAddress.getByAddress(Ipv4.toBytes(address)).canonicalHostName }.getOrNull()
         }
         return withTimeoutOrNull(1_500) { lookup.await() }
             ?.takeIf { it != ip && it.isNotBlank() }
+            ?.let { cleanName(it) }
+    }
+
+    /** Trim trailing dot and a noisy local-domain suffix so "nas.lan." shows as "nas". */
+    private fun cleanName(raw: String): String {
+        val n = raw.trim().trimEnd('.')
+        val suffix = listOf(".lan", ".home", ".local", ".localdomain", ".home.arpa").firstOrNull { n.endsWith(it, ignoreCase = true) }
+        return (if (suffix != null) n.dropLast(suffix.length) else n).ifBlank { n }
     }
 }

@@ -37,6 +37,13 @@ class NetLogicTest {
     }
 
     @Test
+    fun reverseDnsNameReversesOctets() {
+        assertEquals("5.1.168.192.in-addr.arpa", Ipv4.reverseDnsName("192.168.1.5"))
+        assertEquals("1.0.0.10.in-addr.arpa", Ipv4.reverseDnsName("10.0.0.1"))
+        assertNull(Ipv4.reverseDnsName("not-an-ip"))
+    }
+
+    @Test
     fun slash24RangeCoversAllHosts() {
         val range = Ipv4.scanRange(Ipv4.parse("192.168.1.37")!!, 24, "192.168.1.1")!!
         assertEquals("192.168.1.0/24", range.cidr)

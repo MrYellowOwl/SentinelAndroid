@@ -63,6 +63,18 @@ object NetToolsNet {
         else Result.success(deduped)
     }
 
+    /**
+     * Reverse-DNS (PTR) a host against a specific resolver — typically the LAN router, whose dnsmasq
+     * usually serves names for its DHCP leases even when Android's own resolver won't. Returns null on
+     * no record / unreachable. Read-only.
+     */
+    suspend fun reverseDns(ip: String, resolver: String): String? = withContext(Dispatchers.IO) {
+        val arpa = Ipv4.reverseDnsName(ip) ?: return@withContext null
+        runCatching { queryOne(arpa, "PTR", resolver) }.getOrNull()
+            ?.firstOrNull { it.type.equals("PTR", ignoreCase = true) }
+            ?.value?.trim()?.trimEnd('.')?.takeIf { it.isNotBlank() && it != "(no data)" }
+    }
+
     private fun queryOne(name: String, recordType: String, resolver: String): List<DnsAnswer> =
         DatagramSocket().use { socket ->
             socket.soTimeout = 4000
