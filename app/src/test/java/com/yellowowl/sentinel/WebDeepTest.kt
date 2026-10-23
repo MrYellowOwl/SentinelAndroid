@@ -57,4 +57,23 @@ class WebDeepTest {
         assertEquals(Severity.INFO, f.severity)
         assertTrue(f.title.contains("soft-404"))
     }
+
+    @Test fun dangerousMethodsFlagsTraceAsMedium() {
+        val f = WebDeep.dangerousMethodsFinding("s", "h", "GET, POST, OPTIONS, TRACE")!!
+        assertEquals(Severity.MEDIUM, f.severity)
+        assertTrue(f.title.contains("TRACE"))
+        assertTrue(f.details.contains("Cross-Site Tracing"))
+    }
+
+    @Test fun dangerousMethodsFlagsPutDeleteAsLow() {
+        val f = WebDeep.dangerousMethodsFinding("s", "h", "GET, HEAD, PUT, DELETE")!!
+        assertEquals(Severity.LOW, f.severity)
+        assertTrue(f.title.contains("DELETE") && f.title.contains("PUT"))
+    }
+
+    @Test fun dangerousMethodsNullWhenOnlySafeMethods() {
+        assertNull(WebDeep.dangerousMethodsFinding("s", "h", "GET, HEAD, POST, OPTIONS"))
+        assertNull(WebDeep.dangerousMethodsFinding("s", "h", null))
+        assertNull(WebDeep.dangerousMethodsFinding("s", "h", ""))
+    }
 }

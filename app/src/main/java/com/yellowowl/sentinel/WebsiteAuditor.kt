@@ -103,6 +103,12 @@ object WebsiteAuditor {
             out
         }
 
+        // Dangerous HTTP methods: read what the server advertises via OPTIONS (we never send a write method).
+        val methods = async {
+            val opt = Http.get(base, timeoutMillis = 8_000, maxBytes = 1024, followRedirects = false, method = "OPTIONS")
+            WebDeep.dangerousMethodsFinding(scope, host, opt?.header("allow"))
+        }
+
         // Soft-404 guard: if the server returns 200 for a known-nonexistent path, its 200s are
         // meaningless and the sweep would be all false positives — so skip it and say why.
         val softProbe = async {
@@ -126,7 +132,7 @@ object WebsiteAuditor {
             pathProbes.awaitAll().filterNotNull()
         }
 
-        corsAndSri.await() + pathFindings
+        corsAndSri.await() + listOfNotNull(methods.await()) + pathFindings
     }
 
     private fun probeCounterpart(requested: URL): CounterpartProbe {

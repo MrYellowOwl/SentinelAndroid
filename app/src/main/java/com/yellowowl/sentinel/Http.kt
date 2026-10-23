@@ -25,7 +25,8 @@ object Http {
         maxBytes: Int = 512 * 1024,
         followRedirects: Boolean = true,
         extraHeaders: Map<String, String> = emptyMap(),
-        readTimeoutMillis: Int = timeoutMillis
+        readTimeoutMillis: Int = timeoutMillis,
+        method: String = "GET"
     ): Result? = withContext(Dispatchers.IO) {
         var current = runCatching { URI(urlString).toURL() }.getOrNull() ?: return@withContext null
         repeat(WebChecks.MAX_REDIRECTS + 1) {
@@ -34,7 +35,7 @@ object Http {
                 connection.connectTimeout = timeoutMillis
                 connection.readTimeout = readTimeoutMillis
                 connection.instanceFollowRedirects = false
-                connection.requestMethod = "GET"
+                connection.requestMethod = method
                 connection.useCaches = false
                 connection.setRequestProperty("User-Agent", USER_AGENT)
                 connection.setRequestProperty("Accept", "*/*")

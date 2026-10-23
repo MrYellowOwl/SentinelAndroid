@@ -80,6 +80,30 @@ object WebDeep {
     /** If a request for a known-nonexistent path returns 200, the server soft-404s and the sweep is unreliable. */
     fun looksLikeSoftNotFound(randomPathStatus: Int?): Boolean = randomPathStatus == 200
 
+    /**
+     * Flags risky HTTP methods a server advertises in its OPTIONS `Allow` header. Detection only —
+     * we read what the server says it accepts; we never actually send a PUT/DELETE to confirm it.
+     */
+    fun dangerousMethodsFinding(scope: String, host: String, allowHeader: String?): Finding? {
+        if (allowHeader.isNullOrBlank()) return null
+        val methods = allowHeader.split(',').map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet()
+        val risky = methods.filter { it in setOf("PUT", "DELETE", "TRACE", "TRACK", "CONNECT", "PATCH") }
+        if (risky.isEmpty()) return null
+        val notes = buildList {
+            if ("TRACE" in methods || "TRACK" in methods) add("TRACE/TRACK enables Cross-Site Tracing (XST)")
+            if ("PUT" in methods) add("PUT may allow uploading files")
+            if ("DELETE" in methods) add("DELETE may allow removing resources")
+            if ("CONNECT" in methods) add("CONNECT can let the server be used as a proxy")
+            if ("PATCH" in methods) add("PATCH may allow modifying resources")
+        }
+        // XST is the clearest exploitable case; otherwise it's a configuration concern to verify.
+        val severity = if ("TRACE" in methods || "TRACK" in methods) Severity.MEDIUM else Severity.LOW
+        return web(scope, host, "Risky HTTP methods enabled: ${risky.sorted().joinToString(", ")}", severity,
+            "The server's OPTIONS response advertises: ${risky.sorted().joinToString(", ")}. ${notes.joinToString("; ")}. " +
+                "Whether these are actually abusable depends on authentication and server config — verify before acting.",
+            "Disable any write/debug methods the application doesn't need (TRACE/TRACK especially); restrict PUT/DELETE/PATCH to authenticated APIs that require them.")
+    }
+
     fun softNotFoundFinding(scope: String, host: String): Finding =
         web(scope, host, "Sensitive-path sweep skipped (server soft-404s)", Severity.INFO,
             "A request for a random nonexistent path returned HTTP 200, so this server answers 200 for everything. The path sweep was skipped to avoid false positives.",
