@@ -50,6 +50,18 @@ import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Laptop
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Lan
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Language
@@ -1257,28 +1269,28 @@ internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit, shodanKey
     ) {
         ScreenHeading("Network tools", "Grouped utilities for quick checks in the field. Tap a category to expand it.")
 
-        ToolSection("REACHABILITY & DISCOVERY", "Ping, port scan, Wi-Fi, speed test", startExpanded = true) {
+        ToolSection("REACHABILITY & DISCOVERY", "Ping, port scan, Wi-Fi, speed test", icon = Icons.Filled.Sensors, startExpanded = true) {
             PingTool(onCopy)
             PortScanTool(onCopy)
             WifiScanTool()
             SpeedTestTool()
         }
-        ToolSection("DNS & DOMAIN", "Lookups, email posture, subdomains, WHOIS") {
+        ToolSection("DNS & DOMAIN", "Lookups, email posture, subdomains, WHOIS", icon = Icons.Filled.Dns) {
             DnsTool(onCopy)
-            HostFindingsTool("DNS / EMAIL POSTURE", "Checks SPF, DMARC, DKIM, CAA and DNSSEC for a domain — email-security and spoofing-resistance.", "example.com", "Check posture") { NetToolsNet.dnsPosture(it) }
+            HostFindingsTool("DNS / EMAIL POSTURE", "Checks SPF, DMARC, DKIM, CAA and DNSSEC for a domain — email-security and spoofing-resistance.", "example.com", "Check posture", icon = Icons.Filled.Email) { NetToolsNet.dnsPosture(it) }
             SubdomainTool(onCopy)
             WhoisTool(onCopy)
         }
-        ToolSection("SERVICE ASSESSMENT", "SSH, SMB and SNMP — read-only, no login") {
-            HostFindingsTool("SSH AUDIT", "Reads the SSH banner and advertised algorithms (KEX, host-key, cipher, MAC) and flags weak/legacy ones. No login.", "192.168.1.1", "Audit SSH") { NetToolsNet.sshAudit(it) }
-            HostFindingsTool("SMB SIGNING", "SMB2 negotiate: reads the dialect and whether message signing is required (relay risk). No auth, no share access.", "192.168.1.1", "Check SMB") { NetToolsNet.smbInfo(it) }
-            HostFindingsTool("SNMP INFO", "Queries SNMP with the default \"public\" community; a reply is itself a misconfiguration and discloses system info.", "192.168.1.1", "Query SNMP") { NetToolsNet.snmpInfo(it) }
+        ToolSection("SERVICE ASSESSMENT", "SSH, SMB and SNMP — read-only, no login", icon = Icons.Filled.Security) {
+            HostFindingsTool("SSH AUDIT", "Reads the SSH banner and advertised algorithms (KEX, host-key, cipher, MAC) and flags weak/legacy ones. No login.", "192.168.1.1", "Audit SSH", icon = Icons.Filled.Terminal) { NetToolsNet.sshAudit(it) }
+            HostFindingsTool("SMB SIGNING", "SMB2 negotiate: reads the dialect and whether message signing is required (relay risk). No auth, no share access.", "192.168.1.1", "Check SMB", icon = Icons.Filled.Storage) { NetToolsNet.smbInfo(it) }
+            HostFindingsTool("SNMP INFO", "Queries SNMP with the default \"public\" community; a reply is itself a misconfiguration and discloses system info.", "192.168.1.1", "Query SNMP", icon = Icons.Filled.Router) { NetToolsNet.snmpInfo(it) }
         }
-        ToolSection("EXPOSURE & INTEL", "Public-IP exposure and third-party intel") {
+        ToolSection("EXPOSURE & INTEL", "Public-IP exposure and third-party intel", icon = Icons.Filled.Public) {
             ExposureTool(onCopy)
-            HostFindingsTool("EXTERNAL INTEL", "Passive context from Shodan (IPs) and VirusTotal (IPs/domains). Bring your own API keys in Settings.", "example.com or 1.2.3.4", "Look up") { NetToolsNet.externalIntel(it, shodanKey, vtKey) }
+            HostFindingsTool("EXTERNAL INTEL", "Passive context from Shodan (IPs) and VirusTotal (IPs/domains). Bring your own API keys in Settings.", "example.com or 1.2.3.4", "Look up", icon = Icons.Filled.Public) { NetToolsNet.externalIntel(it, shodanKey, vtKey) }
         }
-        ToolSection("UTILITIES", "Subnet calculator, MAC vendor, Wake-on-LAN") {
+        ToolSection("UTILITIES", "Subnet calculator, MAC vendor, Wake-on-LAN", icon = Icons.Filled.Build) {
             SubnetTool(onCopy)
             MacVendorTool(onCopy)
             WolTool()
@@ -1297,6 +1309,7 @@ internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit, shodanKey
 private fun ToolSection(
     title: String,
     subtitle: String,
+    icon: ImageVector = Icons.Filled.Build,
     startExpanded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -1305,9 +1318,10 @@ private fun ToolSection(
         SurfaceCard(onClick = { expanded = !expanded }) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
                     Eyebrow(title)
                     Text(subtitle, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
@@ -1324,10 +1338,13 @@ private fun ToolSection(
 }
 
 @Composable
-private fun ToolCard(title: String, description: String, content: @Composable ColumnScope.() -> Unit) {
+private fun ToolCard(title: String, description: String, icon: ImageVector = Icons.Filled.Build, content: @Composable ColumnScope.() -> Unit) {
     SurfaceCard {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Eyebrow(title)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(18.dp))
+                Eyebrow(title)
+            }
             Text(description, color = TextMuted, fontSize = 12.sp, lineHeight = 15.sp)
             content()
         }
@@ -1411,7 +1428,7 @@ private fun PingTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("PING", "Reachability and round-trip time (uses the system ping).") {
+    ToolCard("PING", "Reachability and round-trip time (uses the system ping).", Icons.Filled.Sensors) {
         ToolField(host, { host = it }, "Host or IP", !busy, placeholder = "example.com or 192.168.1.1", keyboard = KeyboardType.Uri, onGo = run)
         RunButton("Ping", !busy && host.isNotBlank(), run)
         ToolOutput(busy, out, err, onCopy)
@@ -1437,7 +1454,7 @@ private fun DnsTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("DNS LOOKUP", "Query a public resolver (8.8.8.8) for DNS records. ALL queries every common type.") {
+    ToolCard("DNS LOOKUP", "Query a public resolver (8.8.8.8) for DNS records. ALL queries every common type.", Icons.Filled.Dns) {
         ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("ALL", "A", "AAAA", "MX", "TXT", "NS", "CNAME", "SOA").forEach { t ->
@@ -1474,7 +1491,7 @@ private fun PortScanTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("PORT SCAN", "TCP connect scan of one host. Ranges like 1-1024 or lists like 22,80,443.") {
+    ToolCard("PORT SCAN", "TCP connect scan of one host. Ranges like 1-1024 or lists like 22,80,443.", Icons.Filled.Lan) {
         ToolField(host, { host = it }, "Host or IP", !busy, placeholder = "192.168.1.1", keyboard = KeyboardType.Uri)
         ToolField(ports, { ports = it }, "Ports", !busy, placeholder = "1-1024 or 22,80,443", onGo = run)
         RunButton("Scan", !busy && host.isNotBlank(), run)
@@ -1499,7 +1516,7 @@ private fun WhoisTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("WHOIS", "Domain registration details (TCP port 43).") {
+    ToolCard("WHOIS", "Domain registration details (TCP port 43).", Icons.Filled.Info) {
         ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
         RunButton("Look up", !busy && domain.isNotBlank(), run)
         ToolOutput(busy, out, err, onCopy, mono = true, scrollable = true)
@@ -1525,7 +1542,7 @@ private fun SubdomainTool(onCopy: (String) -> Unit) {
             }
         }
     }
-    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from CT logs (crt.sh + Certspotter). Read-only — never touches the target.") {
+    ToolCard("SUBDOMAIN FINDER", "Passive subdomain discovery from CT logs (crt.sh + Certspotter). Read-only — never touches the target.", Icons.Filled.Language) {
         ToolField(domain, { domain = it }, "Domain", !busy, placeholder = "example.com", keyboard = KeyboardType.Uri, onGo = run)
         RunButton(if (busy) "Searching…" else "Find subdomains", !busy && domain.isNotBlank(), run)
         if (!busy && !err && count > 0) Text("$count subdomain(s) found", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1539,6 +1556,7 @@ private fun HostFindingsTool(
     description: String,
     placeholder: String,
     actionLabel: String,
+    icon: ImageVector = Icons.Filled.Dns,
     runner: suspend (String) -> Result<List<Finding>>
 ) {
     val scope = rememberCoroutineScope()
@@ -1557,7 +1575,7 @@ private fun HostFindingsTool(
             }
         }
     }
-    ToolCard(eyebrow, description) {
+    ToolCard(eyebrow, description, icon) {
         ToolField(input, { input = it }, "Host or domain", !busy, placeholder = placeholder, keyboard = KeyboardType.Uri, onGo = run)
         RunButton(if (busy) "Working…" else actionLabel, !busy && input.isNotBlank(), run)
         if (busy) Text("Running…", color = TextMuted, fontSize = 13.sp)
@@ -1580,7 +1598,7 @@ private fun SubnetTool(onCopy: (String) -> Unit) {
     var prefix by rememberSaveable { mutableStateOf("24") }
     var out by remember { mutableStateOf<String?>(null) }
     var err by remember { mutableStateOf(false) }
-    ToolCard("SUBNET CALCULATOR", "Network, broadcast, host range and mask for an IP/prefix.") {
+    ToolCard("SUBNET CALCULATOR", "Network, broadcast, host range and mask for an IP/prefix.", Icons.Filled.Calculate) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(ip, { ip = it }, label = { Text("IP") }, placeholder = { Text("192.168.1.10", color = TextMuted) }, singleLine = true, modifier = Modifier.weight(2f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false))
             OutlinedTextField(prefix, { prefix = it }, label = { Text("/") }, placeholder = { Text("24", color = TextMuted) }, singleLine = true, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
@@ -1603,7 +1621,7 @@ private fun MacVendorTool(onCopy: (String) -> Unit) {
     var mac by rememberSaveable { mutableStateOf("") }
     var out by remember { mutableStateOf<String?>(null) }
     var err by remember { mutableStateOf(false) }
-    ToolCard("MAC VENDOR", "Identify a manufacturer from a MAC address (OUI prefix).") {
+    ToolCard("MAC VENDOR", "Identify a manufacturer from a MAC address (OUI prefix).", Icons.Filled.Memory) {
         ToolField(mac, { mac = it }, "MAC address", true, placeholder = "aa:bb:cc:dd:ee:ff")
         RunButton("Look up", mac.isNotBlank()) {
             val norm = Oui.normalize(mac)
@@ -1622,7 +1640,7 @@ private fun WolTool() {
     var busy by remember { mutableStateOf(false) }
     var out by remember { mutableStateOf<String?>(null) }
     var err by remember { mutableStateOf(false) }
-    ToolCard("WAKE-ON-LAN", "Send a magic packet to power on a device by MAC.") {
+    ToolCard("WAKE-ON-LAN", "Send a magic packet to power on a device by MAC.", Icons.Filled.Bolt) {
         ToolField(mac, { mac = it }, "Target MAC", !busy, placeholder = "aa:bb:cc:dd:ee:ff")
         ToolField(bcast, { bcast = it }, "Broadcast address", !busy, keyboard = KeyboardType.Uri)
         RunButton("Send", !busy && mac.isNotBlank()) {
@@ -1645,7 +1663,7 @@ private fun SpeedTestTool() {
     var progress by remember { mutableStateOf<String?>(null) }
     var out by remember { mutableStateOf<String?>(null) }
     var err by remember { mutableStateOf(false) }
-    ToolCard("INTERNET SPEED", "Measures your phone's download speed and latency (via Cloudflare).") {
+    ToolCard("INTERNET SPEED", "Measures your phone's download speed and latency (via Cloudflare).", Icons.Filled.Speed) {
         RunButton(if (busy) "Testing…" else "Run speed test", !busy) {
             busy = true; out = null; progress = "Starting…"
             scope.launch {
@@ -1669,7 +1687,7 @@ private fun ExposureTool(onCopy: (String) -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<NetToolsNet.ExposureResult?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
-    ToolCard("PUBLIC IP & EXPOSURE", "Your internet-facing IP and ISP/ASN, and which inbound ports answer from outside.") {
+    ToolCard("PUBLIC IP & EXPOSURE", "Your internet-facing IP and ISP/ASN, and which inbound ports answer from outside.", Icons.Filled.Public) {
         RunButton(if (busy) "Checking…" else "Check my exposure", !busy) {
             busy = true; result = null; err = null
             scope.launch {
@@ -1726,7 +1744,7 @@ private fun WifiScanTool() {
         if (!granted) note = "Location permission is required by Android to list Wi-Fi networks."
     }
 
-    ToolCard("NEARBY WI-FI", "Lists access points in range with channel, signal and security.") {
+    ToolCard("NEARBY WI-FI", "Lists access points in range with channel, signal and security.", Icons.Filled.Wifi) {
         if (!hasPerm) {
             Text("Android requires location permission to read Wi-Fi scans. Nothing about your location leaves the phone.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
             RunButton("Grant permission", true) { permLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) }
