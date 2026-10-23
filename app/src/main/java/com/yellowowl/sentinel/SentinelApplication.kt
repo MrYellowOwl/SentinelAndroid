@@ -8,6 +8,7 @@ class SentinelApplication : Application() {
         SentinelRepo.init(this)
         VulnStore.init(this)
         HistoryStore.init(this)
+        NetworkStore.init(this)
         NicknameStore.init(this)
         Notifier.createChannels(this)
     }

@@ -84,6 +84,8 @@ object ScanRunner {
             SentinelRepo.replaceRun(FindingSource.NETWORK, result.cidr, run)
             SentinelSettings.saveLastScan(app, SentinelSettings.LastScan(result.cidr, System.currentTimeMillis(), result.devices.size))
             HistoryStore.recordNetwork(app, result.cidr, result.devices, run)
+            // Persist this scan into the per-network memory (independent of Findings).
+            NetworkStore.recordScan(app, range, result)
             // Keep the monitoring baseline fresh so background checks diff against the latest manual scan.
             if (MonitorStore.isEnabled(app) && MonitorStore.monitoredCidr(app) == result.cidr) {
                 MonitorStore.saveBaseline(app, result.cidr, ScanDiffer.snapshot(result.devices))
