@@ -163,7 +163,7 @@ internal fun DashboardScreen(
             SectionHeader("TOP PRIORITIES", "Start here")
             priorities.forEach { finding ->
                 SurfaceCard(onClick = { onOpenFindings(null) }) {
-                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         SeverityBadge(finding.severity)
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {
@@ -201,7 +201,7 @@ internal fun DashboardScreen(
                 Modifier
                     .fillMaxWidth()
                     .toggleable(value = alertsEnabled, role = Role.Switch, onValueChange = onAlertsChange)
-                    .padding(14.dp),
+                    .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Filled.NotificationsActive, contentDescription = null, tint = Accent, modifier = Modifier.size(22.dp))
@@ -223,7 +223,7 @@ internal fun DashboardScreen(
         }
 
         SurfaceCard {
-            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.Lock, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(
@@ -458,7 +458,7 @@ internal fun NetworkScreen(
 private fun DeviceCard(device: DeviceResult, nicknames: Map<String, String>, onClick: () -> Unit) {
     val name = Nicknames.displayName(device, nicknames)
     SurfaceCard(onClick = onClick) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val icon = when {
                     device.isThisDevice -> Icons.Filled.PhoneAndroid
@@ -636,10 +636,10 @@ internal fun FindingsScreen(
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ScreenHeading("Findings", "Highest priority first. Each scan replaces its previous results.")
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Button(
@@ -658,15 +658,14 @@ internal fun FindingsScreen(
                         Text("Clear")
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
-                    Text("Export:", color = TextMuted, fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterVertically))
-                    OutlinedButton(onClick = onPrintPdf, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = onPrintPdf, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) {
                         Text("PDF", color = Accent, fontSize = 13.sp)
                     }
-                    OutlinedButton(onClick = { onExport(ReportExporter.Format.CSV) }, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border)) {
+                    OutlinedButton(onClick = { onExport(ReportExporter.Format.CSV) }, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) {
                         Text("CSV", color = Accent, fontSize = 13.sp)
                     }
-                    OutlinedButton(onClick = { onExport(ReportExporter.Format.JSON) }, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border)) {
+                    OutlinedButton(onClick = { onExport(ReportExporter.Format.JSON) }, enabled = findings.isNotEmpty(), border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) {
                         Text("JSON", color = Accent, fontSize = 13.sp)
                     }
                 }
@@ -705,7 +704,7 @@ internal fun FindingsScreen(
 @Composable
 private fun VulnDbCard(status: VulnDbStatus, onUpdate: () -> Unit) {
     SurfaceCard {
-        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Shield, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -755,7 +754,7 @@ private fun SeverityChip(label: String, selected: Boolean, color: Color, onClick
 @Composable
 internal fun FindingCard(finding: Finding, onDismiss: (() -> Unit)? = null) {
     SurfaceCard {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SeverityBadge(finding.severity)
                 Spacer(Modifier.width(8.dp))
@@ -924,7 +923,7 @@ internal fun HostDetailScreen(
         if (device.openPorts.isNotEmpty()) {
             item {
                 SurfaceCard {
-                    Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Eyebrow("OPEN PORTS · ${device.openPorts.size}")
                         device.openPorts.forEach { port ->
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -939,7 +938,7 @@ internal fun HostDetailScreen(
         item {
             val commands = remember(device) { Handoff.forDevice(device) }
             SurfaceCard {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Eyebrow("LAPTOP COMMANDS")
                     Text("Copy-ready for your rig. Sentinel doesn't run these.", color = TextMuted, fontSize = 12.sp)
                     commands.forEach { cmd ->
@@ -996,7 +995,7 @@ private fun WalkthroughFindingCard(
     var notes by rememberSaveable(finding.key) { mutableStateOf(annotation?.notes ?: "") }
 
     SurfaceCard {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 SeverityBadge(finding.severity)
                 Spacer(Modifier.width(8.dp))
@@ -1810,7 +1809,7 @@ internal fun HistoryScreen(
             val e = entries[i]
             val diff = ScanHistoryCodec.diffAgainstPrevious(entries, e)
             SurfaceCard {
-                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(e.label, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(DateUtils.getRelativeTimeSpanString(e.at).toString(), color = TextMuted, fontSize = 11.sp)
