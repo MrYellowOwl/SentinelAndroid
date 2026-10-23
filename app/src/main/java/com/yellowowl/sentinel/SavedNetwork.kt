@@ -17,6 +17,7 @@ data class SavedDevice(
     val ip: String,
     val name: String? = null,    // hostname / discovered name
     val vendor: String? = null,
+    val model: String? = null,   // model / product name, when disclosed (UPnP, mDNS, SNMP)
     val kind: String? = null,    // Router, Printer, TV, Phone, NAS…
     val openPorts: List<Int> = emptyList(),
     val firstSeen: Long = 0L,
@@ -134,6 +135,7 @@ object NetworkCodec {
                         .put("ip", d.ip)
                         .put("name", d.name ?: JSONObject.NULL)
                         .put("vendor", d.vendor ?: JSONObject.NULL)
+                        .put("model", d.model ?: JSONObject.NULL)
                         .put("kind", d.kind ?: JSONObject.NULL)
                         .put("ports", JSONArray(d.openPorts))
                         .put("firstSeen", d.firstSeen)
@@ -182,6 +184,7 @@ object NetworkCodec {
                         ip = ip,
                         name = d.optString("name").ifBlank { null },
                         vendor = d.optString("vendor").ifBlank { null },
+                        model = d.optString("model").ifBlank { null },
                         kind = d.optString("kind").ifBlank { null },
                         openPorts = ports,
                         firstSeen = d.optLong("firstSeen"),

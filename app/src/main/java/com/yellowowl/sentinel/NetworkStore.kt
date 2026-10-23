@@ -56,6 +56,7 @@ object NetworkStore {
                 ip = d.ipAddress,
                 name = d.identity?.name ?: d.hostname,
                 vendor = d.vendor,
+                model = d.model,
                 kind = d.kind,
                 openPorts = d.openPorts.map { it.port }.sorted(),
                 isGateway = d.isGateway

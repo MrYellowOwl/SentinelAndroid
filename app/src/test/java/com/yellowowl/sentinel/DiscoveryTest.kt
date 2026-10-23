@@ -34,6 +34,46 @@ class DiscoveryTest {
         assertEquals("TV / media", id.kind)
     }
 
+    @Test
+    fun ssdpExtractsLocationHeader() {
+        val loc = Ssdp.locationOf(
+            "HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=1800\r\n" +
+                "LOCATION: http://10.0.0.177:52323/dmr.xml\r\nST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n"
+        )
+        assertEquals("http://10.0.0.177:52323/dmr.xml", loc)
+        assertNull(Ssdp.locationOf("HTTP/1.1 200 OK\r\nST: ssdp:all\r\n\r\n"))
+    }
+
+    @Test
+    fun ssdpParsesDescriptionForFriendlyNameAndModel() {
+        val xml = """
+            <?xml version="1.0"?>
+            <root xmlns="urn:schemas-upnp-org:device-1-0"><device>
+              <deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
+              <friendlyName>Living Room TV</friendlyName>
+              <manufacturer>Samsung Electronics</manufacturer>
+              <modelName>UN55 Smart TV</modelName>
+              <modelNumber>4K</modelNumber>
+            </device></root>
+        """.trimIndent()
+        val id = Ssdp.parseDescription(xml)
+        assertEquals("Living Room TV", id.name)
+        assertEquals("Samsung Electronics", id.vendor)
+        assertEquals("UN55 Smart TV 4K", id.model)
+        assertEquals("TV / media", id.kind)
+    }
+
+    @Test
+    fun ssdpDescriptionUnescapesAndSkipsRedundantModelNumber() {
+        val xml = "<device><friendlyName>Bob&apos;s Xbox</friendlyName>" +
+            "<manufacturer>Microsoft</manufacturer><modelName>Xbox Series X</modelName>" +
+            "<modelNumber>Series X</modelNumber></device>"
+        val id = Ssdp.parseDescription(xml)
+        assertEquals("Bob's Xbox", id.name)
+        assertEquals("Microsoft", id.vendor)
+        assertEquals("Xbox Series X", id.model) // modelNumber already contained, not appended
+    }
+
     // ---- NetBIOS ----
 
     @Test

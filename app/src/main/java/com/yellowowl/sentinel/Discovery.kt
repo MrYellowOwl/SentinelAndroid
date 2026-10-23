@@ -39,11 +39,7 @@ object Ssdp {
         ).toByteArray(Charsets.US_ASCII)
 
     fun parseResponse(text: String): DeviceIdentity {
-        val headers = text.lineSequence()
-            .mapNotNull { line ->
-                val i = line.indexOf(':')
-                if (i <= 0) null else line.substring(0, i).trim().lowercase() to line.substring(i + 1).trim()
-            }.toMap()
+        val headers = parseHeaders(text)
         val server = headers["server"]
         val st = headers["st"].orEmpty() + " " + headers["usn"].orEmpty() + " " + server.orEmpty()
         return DeviceIdentity(
@@ -51,6 +47,49 @@ object Ssdp {
             kind = classify(st)
         )
     }
+
+    /** The URL of the device description document (LOCATION header), where the rich name/model lives. */
+    fun locationOf(text: String): String? =
+        parseHeaders(text)["location"]?.takeIf { it.startsWith("http", ignoreCase = true) }
+
+    private fun parseHeaders(text: String): Map<String, String> =
+        text.lineSequence()
+            .mapNotNull { line ->
+                val i = line.indexOf(':')
+                if (i <= 0) null else line.substring(0, i).trim().lowercase() to line.substring(i + 1).trim()
+            }.toMap()
+
+    /**
+     * Parses a UPnP device-description XML document for the human-facing identity: friendlyName,
+     * manufacturer, modelName/modelNumber and deviceType. This is where a TV reports "SmartTV 4K"
+     * and a console reports its make — data the M-SEARCH headers alone don't carry.
+     */
+    fun parseDescription(xml: String): DeviceIdentity {
+        fun tag(name: String): String? =
+            Regex("<$name>(.*?)</$name>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(xml)?.groupValues?.get(1)?.let { unescape(it).trim() }?.takeIf { it.isNotBlank() }
+
+        val friendly = tag("friendlyName")
+        val manufacturer = tag("manufacturer")
+        val modelName = tag("modelName")
+        val modelNumber = tag("modelNumber")
+        val deviceType = tag("deviceType").orEmpty()
+        val model = when {
+            modelName == null -> null
+            modelNumber != null && !modelName.contains(modelNumber, true) -> "$modelName $modelNumber"
+            else -> modelName
+        }?.take(60)
+        return DeviceIdentity(
+            name = friendly,
+            vendor = manufacturer,
+            model = model,
+            kind = classify("$deviceType $friendly")
+        )
+    }
+
+    private fun unescape(s: String): String = s
+        .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+        .replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'")
 
     private fun classify(hint: String): String? = when {
         hint.contains("InternetGatewayDevice", true) || hint.contains("WANConnectionDevice", true) -> "Router"

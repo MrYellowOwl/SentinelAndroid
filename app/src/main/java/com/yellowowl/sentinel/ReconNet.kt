@@ -90,11 +90,40 @@ object ReconNet {
         return merged.filterValues { !it.isEmpty }
     }
 
-    private suspend fun ssdp(windowMillis: Int): Map<String, DeviceIdentity> =
-        collectUdp(windowMillis) { socket ->
+    private suspend fun ssdp(windowMillis: Int): Map<String, DeviceIdentity> {
+        val raw = collectUdp(windowMillis) { socket ->
             val payload = Ssdp.searchRequest()
             socket.send(DatagramPacket(payload, payload.size, InetAddress.getByName(Ssdp.MULTICAST_HOST), Ssdp.PORT))
-        } parseWith { data -> Ssdp.parseResponse(String(data, Charsets.US_ASCII)) }
+        }
+        val byIp = HashMap<String, DeviceIdentity>()
+        val locationByIp = LinkedHashMap<String, String>()   // one description URL per responder
+        for ((ip, data) in raw) {
+            val text = String(data, Charsets.US_ASCII)
+            val base = runCatching { Ssdp.parseResponse(text) }.getOrNull()
+            if (base != null && !base.isEmpty) byIp[ip] = byIp[ip]?.merge(base) ?: base
+            if (ip !in locationByIp) Ssdp.locationOf(text)?.let { locationByIp[ip] = it }
+        }
+        // Fetch each device's description document for its friendlyName / manufacturer / modelName —
+        // the fields an M-SEARCH reply alone doesn't carry. These are LAN reads of a page the device
+        // itself advertises; nothing is sent beyond the local network.
+        val described = coroutineScope {
+            locationByIp.entries.map { (ip, url) ->
+                async { runCatching { fetchDescription(url) }.getOrNull()?.takeIf { !it.isEmpty }?.let { ip to it } }
+            }.awaitAll().filterNotNull()
+        }
+        for ((ip, desc) in described) {
+            // The description's friendlyName/model/vendor are richer, so they win over the header guess.
+            byIp[ip] = desc.merge(byIp[ip] ?: DeviceIdentity())
+        }
+        return byIp.filterValues { !it.isEmpty }
+    }
+
+    /** Reads a UPnP device-description document (LAN, http) and extracts its identity. */
+    private suspend fun fetchDescription(url: String): DeviceIdentity? {
+        val res = Http.get(url, timeoutMillis = 1500, maxBytes = 64 * 1024) ?: return null
+        if (res.code !in 200..299 || res.body.isBlank()) return null
+        return Ssdp.parseDescription(res.body)
+    }
 
     // The service-type meta-query plus the common types most devices advertise, so one window names far more.
     private val mdnsQueries = listOf(

@@ -356,9 +356,9 @@ internal fun NetworkScreen(
                     if (range != null) {
                         Text(
                             buildString {
-                                append("This phone: ${range.phoneIp}")
-                                range.gatewayIp?.let { append(" · Router: $it") }
-                                append("\nChecks ${range.hostCount} addresses")
+                                append("Your phone is ${range.phoneIp}")
+                                range.gatewayIp?.let { append(", router is $it") }
+                                append(".\nSentinel looks at the ${range.hostCount} addresses on this network.")
                             },
                             color = TextMuted, fontSize = 13.sp, lineHeight = 19.sp
                         )
@@ -685,11 +685,14 @@ private fun DeviceRow(d: SavedDevice, nicknames: Map<String, String>, onClick: (
             }
         }
         Spacer(Modifier.width(8.dp))
+        // Right side, Fing-style: maker over model, then status. The green dot already signals "online",
+        // so we only spell out a time when the device is offline — keeps the row easy to read.
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            clean(d.vendor)?.let { Text(it, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1) }
-            Text(
-                if (d.online) "Online" else "Seen ${DateUtils.getRelativeTimeSpanString(d.lastSeen)}",
-                color = if (d.online) Accent else TextMuted, fontSize = 11.sp, maxLines = 1
+            clean(d.vendor)?.let { Text(it, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            clean(d.model)?.let { Text(it, color = TextMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            if (!d.online) Text(
+                "Seen ${DateUtils.getRelativeTimeSpanString(d.lastSeen)}",
+                color = TextMuted, fontSize = 11.sp, maxLines = 1
             )
         }
     }

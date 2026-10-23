@@ -13,7 +13,7 @@ Kotlin · Jetpack Compose · Android 8.0+ (API 26) · targets API 36.
 ## Features
 
 **Network assessment**
-- Device discovery on your private Wi-Fi/Ethernet network via TCP sweep, SSDP/mDNS/NetBIOS and SNMP, with naming, vendor/type classification, and MAC recovery from the router's ARP table where SNMP is readable.
+- Device discovery on your private Wi-Fi/Ethernet network via TCP sweep, SSDP/mDNS/NetBIOS and SNMP, with naming, vendor/model/type classification (UPnP description documents yield real make and model), and MAC recovery from the router's ARP table where SNMP is readable.
 - Service fingerprinting (SSH, FTP, SMTP, HTTP, MySQL/MariaDB, Redis, Memcached, Elasticsearch, BIND/unbound, Apache/nginx/IIS/Jetty/lighttpd/Tomcat…) with per-service risk flags, version→CVE matching, and specific fixes.
 - Opt-in background monitoring that alerts on new/departed devices and port changes (matched by MAC, so a DHCP change isn't a false positive).
 
@@ -81,6 +81,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 ---
 
 ## Changelog
+
+**1.19.0** — Much richer device identity, Fing-style. SSDP/UPnP discovery now fetches each device's *description document* (the page the device itself advertises) and reads its `friendlyName`, `manufacturer` and `modelName` — so a TV shows up as its make and model, a console as "Xbox", a gateway as its router model, all resolved locally with no cloud and no account. Devices now carry a **model** alongside vendor, shown on the right of each row (maker over model), and the row is decluttered: the green dot signals "online", so a time only appears when a device is offline. The scan card's wording is plainer. (An opt-in online lookup for devices that reveal no UPnP info is coming next.)
 
 **1.18.7** — More device names, and a Tools-tab tidy. Added reverse mDNS (multicast `in-addr.arpa`) to the name lookup: Apple, smart-TV and IoT devices answer this with their `.local` name even when the router serves no reverse DNS (common on Docsis/cable gateways), so fewer devices show up as bare IPs. Lookup order is now router DNS → reverse mDNS → system resolver, on top of the existing mDNS/NetBIOS/SSDP discovery names. The Tools cards are also a touch tighter and their descriptions trimmed for a cleaner, more consistent feel.
 

@@ -86,6 +86,7 @@ data class DeviceResult(
     /** Best display name: a discovered name, else reverse-DNS, else the IP. */
     val displayName: String get() = identity?.name?.takeIf { it.isNotBlank() } ?: hostname ?: ipAddress
     val vendor: String? get() = identity?.vendor
+    val model: String? get() = identity?.model
     val kind: String? get() = identity?.kind
     val mac: String? get() = identity?.mac
 }
