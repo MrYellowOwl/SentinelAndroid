@@ -39,6 +39,8 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -1062,28 +1064,71 @@ internal fun ToolsScreen(modifier: Modifier, onCopy: (String) -> Unit, shodanKey
         modifier = modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        ScreenHeading("Network tools", "Classic utilities for quick checks in the field.")
-        SpeedTestTool()
-        ExposureTool(onCopy)
-        WifiScanTool()
-        PingTool(onCopy)
-        DnsTool(onCopy)
-        PortScanTool(onCopy)
-        WhoisTool(onCopy)
-        SubdomainTool(onCopy)
-        HostFindingsTool("DNS / EMAIL POSTURE", "Checks SPF, DMARC, DKIM, CAA and DNSSEC for a domain — email-security and spoofing-resistance.", "example.com", "Check posture") { NetToolsNet.dnsPosture(it) }
-        HostFindingsTool("SSH AUDIT", "Reads the SSH banner and advertised algorithms (KEX, host-key, cipher, MAC) and flags weak/legacy ones. No login.", "192.168.1.1", "Audit SSH") { NetToolsNet.sshAudit(it) }
-        HostFindingsTool("SMB SIGNING", "SMB2 negotiate: reads the dialect and whether message signing is required (relay risk). No auth, no share access.", "192.168.1.1", "Check SMB") { NetToolsNet.smbInfo(it) }
-        HostFindingsTool("SNMP INFO", "Queries SNMP with the default \"public\" community; a reply is itself a misconfiguration and discloses system info.", "192.168.1.1", "Query SNMP") { NetToolsNet.snmpInfo(it) }
-        HostFindingsTool("EXTERNAL INTEL", "Passive context from Shodan (IPs) and VirusTotal (IPs/domains). Bring your own API keys in Settings.", "example.com or 1.2.3.4", "Look up") { NetToolsNet.externalIntel(it, shodanKey, vtKey) }
-        SubnetTool(onCopy)
-        MacVendorTool(onCopy)
-        WolTool()
+        ScreenHeading("Network tools", "Grouped utilities for quick checks in the field. Tap a category to expand it.")
+
+        ToolSection("REACHABILITY & DISCOVERY", "Ping, port scan, Wi-Fi, speed test", startExpanded = true) {
+            PingTool(onCopy)
+            PortScanTool(onCopy)
+            WifiScanTool()
+            SpeedTestTool()
+        }
+        ToolSection("DNS & DOMAIN", "Lookups, email posture, subdomains, WHOIS") {
+            DnsTool(onCopy)
+            HostFindingsTool("DNS / EMAIL POSTURE", "Checks SPF, DMARC, DKIM, CAA and DNSSEC for a domain — email-security and spoofing-resistance.", "example.com", "Check posture") { NetToolsNet.dnsPosture(it) }
+            SubdomainTool(onCopy)
+            WhoisTool(onCopy)
+        }
+        ToolSection("SERVICE ASSESSMENT", "SSH, SMB and SNMP — read-only, no login") {
+            HostFindingsTool("SSH AUDIT", "Reads the SSH banner and advertised algorithms (KEX, host-key, cipher, MAC) and flags weak/legacy ones. No login.", "192.168.1.1", "Audit SSH") { NetToolsNet.sshAudit(it) }
+            HostFindingsTool("SMB SIGNING", "SMB2 negotiate: reads the dialect and whether message signing is required (relay risk). No auth, no share access.", "192.168.1.1", "Check SMB") { NetToolsNet.smbInfo(it) }
+            HostFindingsTool("SNMP INFO", "Queries SNMP with the default \"public\" community; a reply is itself a misconfiguration and discloses system info.", "192.168.1.1", "Query SNMP") { NetToolsNet.snmpInfo(it) }
+        }
+        ToolSection("EXPOSURE & INTEL", "Public-IP exposure and third-party intel") {
+            ExposureTool(onCopy)
+            HostFindingsTool("EXTERNAL INTEL", "Passive context from Shodan (IPs) and VirusTotal (IPs/domains). Bring your own API keys in Settings.", "example.com or 1.2.3.4", "Look up") { NetToolsNet.externalIntel(it, shodanKey, vtKey) }
+        }
+        ToolSection("UTILITIES", "Subnet calculator, MAC vendor, Wake-on-LAN") {
+            SubnetTool(onCopy)
+            MacVendorTool(onCopy)
+            WolTool()
+        }
+
         Text(
             "Traceroute (hop-by-hop) and SYN/OS-fingerprint scans need raw sockets and aren't possible on an unrooted phone.",
             color = TextMuted, fontSize = 11.sp, lineHeight = 16.sp
         )
         Spacer(Modifier.height(4.dp))
+    }
+}
+
+/** A collapsible category of tools: a tappable header card that reveals its tools when expanded. */
+@Composable
+private fun ToolSection(
+    title: String,
+    subtitle: String,
+    startExpanded: Boolean = false,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    var expanded by rememberSaveable(title) { mutableStateOf(startExpanded) }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SurfaceCard(onClick = { expanded = !expanded }) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp), modifier = Modifier.weight(1f)) {
+                    Eyebrow(title)
+                    Text(subtitle, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                }
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = TextMuted
+                )
+            }
+        }
+        if (expanded) content()
     }
 }
 
