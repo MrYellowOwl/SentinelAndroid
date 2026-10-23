@@ -188,19 +188,19 @@ internal fun DashboardScreen(
         }
 
         SectionHeader("TOOLS", "Run a check")
-        ToolCard(
+        NavToolCard(
             title = "Network scan",
             subtitle = "Find devices on your Wi-Fi and spot risky open services.",
             icon = Icons.Filled.Router,
             onClick = { onOpen(AppScreen.Network) }
         )
-        ToolCard(
+        NavToolCard(
             title = "Website audit",
             subtitle = "Check HTTPS, certificate expiry, security headers and cookies.",
             icon = Icons.Filled.Language,
             onClick = { onOpen(AppScreen.Website) }
         )
-        ToolCard(
+        NavToolCard(
             title = "Findings & reports",
             subtitle = "Review issues by priority and share an HTML report.",
             icon = Icons.Filled.Assessment,
@@ -268,7 +268,7 @@ private fun StatCard(title: String, value: Int, tint: Color, modifier: Modifier,
 }
 
 @Composable
-private fun ToolCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
+private fun NavToolCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
     SurfaceCard(onClick = onClick) {
         Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(46.dp).background(SurfaceRaised, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
