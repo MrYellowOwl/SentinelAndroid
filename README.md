@@ -82,6 +82,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
+**1.18.4** — Crash fix (root cause). A scan could record two devices under the same identity (e.g. one MAC seen on two IPs via the router's ARP table), which produced duplicate list keys and crashed the Network screen right after a scan. The merge now keeps one row per device, and existing saved data with duplicates is repaired on load — so networks saved before this fix open without crashing too.
+
 **1.18.3** — Crash fix: the Network screen could crash when a saved network held two devices sharing an IP address (an offline device whose address was later reused by a new one), because the device list keyed its rows by IP. Rows are now keyed by a unique device identity.
 
 **1.18.2** — Better hostname resolution. The scanner now asks the router's own DNS (PTR / in-addr.arpa) for each host's name before falling back to Android's resolver — home routers (dnsmasq and friends) name their DHCP clients, so far more devices show a real name instead of a bare IP. Names are also tidied (trailing dot and noisy `.lan`/`.home`/`.local` suffixes removed).

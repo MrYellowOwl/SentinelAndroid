@@ -74,7 +74,10 @@ object NetworkMerge {
 
         for (d in scanned) {
             val key = keyOf(d)
-            seenKeys.add(key)
+            // Dedupe within a single scan: the same device can surface on two IPs (e.g. the gateway's
+            // ARP table reporting one MAC for several addresses), and two rows sharing an identity key
+            // would collide as a list key in the UI. Keep the first; skip the rest.
+            if (!seenKeys.add(key)) continue
             val was = priorByKey[key]
             merged.add(
                 d.copy(
@@ -192,7 +195,8 @@ object NetworkCodec {
                     security = o.optString("security").ifBlank { null },
                     firstSeen = o.optLong("firstSeen"),
                     lastSeen = o.optLong("lastSeen"),
-                    devices = devices
+                    // Heal any pre-existing data that stored two rows with the same device identity.
+                    devices = devices.distinctBy { NetworkMerge.deviceKey(it.mac, it.ip) }
                 )
             )
         }

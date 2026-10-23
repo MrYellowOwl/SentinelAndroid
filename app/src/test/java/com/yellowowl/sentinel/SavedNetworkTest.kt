@@ -59,6 +59,24 @@ class SavedNetworkTest {
         assertTrue(second.devices.indexOf(moved) < second.devices.indexOf(gone))
     }
 
+    @Test fun dedupesDevicesSharingAnIdentityWithinOneScan() {
+        // Same MAC reported on two IPs (ARP quirk) must collapse to one row — two rows with the same
+        // device key would crash the list UI on a duplicate key.
+        val net = NetworkMerge.mergeScan(
+            null, "net1", "Home", "Home", "b1", "192.168.1.0/24", "192.168.1.1", "WPA2",
+            listOf(
+                dev("192.168.1.5", "bb:bb:bb:bb:bb:bb"),
+                dev("192.168.1.6", "bb:bb:bb:bb:bb:bb"),   // same MAC, different IP
+                dev("192.168.1.7", null),
+                dev("192.168.1.7", null)                    // same IP, no MAC
+            ),
+            now = 1000L
+        )
+        val keys = net.devices.map { NetworkMerge.deviceKey(it.mac, it.ip) }
+        assertEquals(keys.distinct(), keys)                // every render key is unique
+        assertEquals(2, net.deviceCount)                   // one per identity
+    }
+
     @Test fun codecRoundTrips() {
         val net = NetworkMerge.mergeScan(
             null, "net1", "Home", "Home", "bssid-1", "192.168.1.0/24", "192.168.1.1", "WPA2",
@@ -74,6 +92,22 @@ class SavedNetworkTest {
         assertEquals(listOf(80, 443), gw.openPorts); assertEquals("aa:aa:aa:aa:aa:aa", gw.mac)
         val noMac = n.devices.first { it.mac == null }
         assertEquals("192.168.1.5", noMac.ip); assertNull(noMac.mac)
+    }
+
+    @Test fun decodeHealsDuplicateDeviceKeys() {
+        // Data written by the pre-fix merge could contain two rows with the same MAC; decode must
+        // collapse them so the list UI can't hit a duplicate key.
+        val json = """
+            {"version":1,"networks":[{"id":"n1","label":"Home","devices":[
+                {"mac":"bb:bb:bb:bb:bb:bb","ip":"192.168.1.5","lastSeen":2},
+                {"mac":"bb:bb:bb:bb:bb:bb","ip":"192.168.1.6","lastSeen":2},
+                {"ip":"192.168.1.9","lastSeen":2}
+            ]}]}
+        """.trimIndent()
+        val net = NetworkCodec.decode(json).single()
+        val keys = net.devices.map { NetworkMerge.deviceKey(it.mac, it.ip) }
+        assertEquals(keys.distinct(), keys)
+        assertEquals(2, net.deviceCount)
     }
 
     @Test fun decodeJunkIsEmpty() {
