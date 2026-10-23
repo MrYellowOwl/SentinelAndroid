@@ -75,6 +75,34 @@ object NetToolsNet {
             ?.value?.trim()?.trimEnd('.')?.takeIf { it.isNotBlank() && it != "(no data)" }
     }
 
+    /**
+     * Reverse-resolve a host's name over multicast DNS (the `in-addr.arpa` PTR). Apple/Bonjour devices,
+     * many smart TVs and IoT gadgets answer this with their `.local` name even when the router serves no
+     * reverse DNS. Uses the unicast-response bit so the reply comes straight back. Read-only; null on miss.
+     */
+    suspend fun reverseMdns(ip: String): String? = withContext(Dispatchers.IO) {
+        val arpa = Ipv4.reverseDnsName(ip) ?: return@withContext null
+        runCatching {
+            DatagramSocket().use { socket ->
+                socket.soTimeout = 700
+                val q = MdnsDns.query(arpa, MdnsDns.TYPE_PTR, qu = true)
+                socket.send(DatagramPacket(q, q.size, InetAddress.getByName(MdnsDns.MULTICAST_HOST), MdnsDns.PORT))
+                val buf = ByteArray(4096)
+                val deadline = System.currentTimeMillis() + 900
+                var name: String? = null
+                while (name == null && System.currentTimeMillis() < deadline) {
+                    val packet = DatagramPacket(buf, buf.size)
+                    try { socket.receive(packet) } catch (_: Exception) { break }
+                    val msg = MdnsDns.parse(packet.data.copyOf(packet.length)) ?: continue
+                    val target = msg.answers.firstOrNull { it.type == MdnsDns.TYPE_PTR && it.target != null }?.target
+                        ?: msg.answers.firstOrNull { it.ip == ip }?.name
+                    name = target?.trimEnd('.')?.removeSuffix(".local")?.trim()?.takeIf { it.isNotBlank() }
+                }
+                name
+            }
+        }.getOrNull()
+    }
+
     private fun queryOne(name: String, recordType: String, resolver: String): List<DnsAnswer> =
         DatagramSocket().use { socket ->
             socket.soTimeout = 4000

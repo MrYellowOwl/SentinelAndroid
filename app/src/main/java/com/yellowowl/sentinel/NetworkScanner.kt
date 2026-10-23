@@ -223,6 +223,10 @@ object NetworkScanner {
                 ?.takeIf { it != ip }
                 ?.let { return cleanName(it) }
         }
+        // Many devices (Apple, smart TVs, IoT) answer reverse mDNS even when the router serves no PTR.
+        runCatching { NetToolsNet.reverseMdns(ip) }.getOrNull()
+            ?.takeIf { it != ip }
+            ?.let { return cleanName(it) }
         val lookup = lookupScope.async {
             runCatching { InetAddress.getByAddress(Ipv4.toBytes(address)).canonicalHostName }.getOrNull()
         }

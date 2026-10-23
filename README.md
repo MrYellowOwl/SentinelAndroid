@@ -82,6 +82,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 
 ## Changelog
 
+**1.18.7** — More device names. Added reverse mDNS (multicast `in-addr.arpa`) to the name lookup: Apple, smart-TV and IoT devices answer this with their `.local` name even when the router serves no reverse DNS (common on Docsis/cable gateways), so fewer devices show up as bare IPs. Lookup order is now router DNS → reverse mDNS → system resolver, on top of the existing mDNS/NetBIOS/SSDP discovery names.
+
 **1.18.6** — Network list polish. The device list is now a single clean card of flat rows with hairline dividers (Fing-style) instead of separate chunky cards, each row carries a device-type icon (router, printer, TV, camera, NAS, PC, phone, server, IoT…), and there are sort controls (IP, Name, Status) plus an "Online only" filter.
 
 **1.18.5** — Cleaner device list (Fing-style). Devices are now compact rows — icon with an online/offline dot, name and IP, vendor and status — with open ports shown as a risk-coloured count (full details on tap) instead of a stack of chips. Fixed a glitch where the gateway could appear twice (a live row plus a stale "offline" twin) when its MAC was recovered on one scan but not the next, and stopped `null` from leaking into device subtitles.
