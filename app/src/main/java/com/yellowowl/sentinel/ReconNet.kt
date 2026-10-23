@@ -46,8 +46,8 @@ object ReconNet {
                         val read = input.read(chunk)
                         if (read <= 0) break
                         buffer.write(chunk, 0, read)
-                        // One line / packet is enough for every banner we parse.
-                        if (kind != ProbeKind.HTTP_HEAD && buffer.toByteArray().contains('\n'.code.toByte())) break
+                        // One line / packet is enough for single-line banners; multi-line kinds read to cap/timeout.
+                        if (kind !in Fingerprint.multiLineKinds && buffer.toByteArray().contains('\n'.code.toByte())) break
                     }
                 } catch (_: SocketTimeoutException) {
                     // Return whatever arrived before the timeout.

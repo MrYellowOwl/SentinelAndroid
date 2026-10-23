@@ -94,7 +94,7 @@ object PortCatalog {
 
     val scanPorts = listOf(
         21, 22, 23, 53, 80, 135, 139, 443, 445, 554, 631, 1433, 1883, 2375, 3306, 3389,
-        5000, 5432, 5900, 6379, 8000, 8008, 8080, 8443, 8888, 9100, 27017, 62078
+        5000, 5432, 5900, 6379, 8000, 8008, 8080, 8443, 8888, 9100, 9200, 11211, 27017, 62078
     )
 
     private val fastPorts = listOf(21, 22, 23, 53, 80, 139, 443, 445, 3306, 3389, 5900, 8080, 8443, 62078, 8008)
@@ -176,6 +176,16 @@ object PortCatalog {
             Severity.MEDIUM,
             "Redis has no password by default and can be abused to run commands.",
             "Bind Redis to localhost or a trusted interface and set requirepass / ACLs."
+        ),
+        9200 to PortRisk(
+            Severity.HIGH,
+            "Elasticsearch has no authentication in its default/open setup, so anyone who can reach it can read and delete indices.",
+            "Enable the built-in security (authentication + TLS), bind it to localhost or a trusted interface, and never expose it directly."
+        ),
+        11211 to PortRisk(
+            Severity.HIGH,
+            "Memcached has no authentication and, if reachable over UDP, is abused for large reflection/amplification DDoS attacks.",
+            "Bind Memcached to localhost, disable the UDP listener (-U 0), and firewall the port off from untrusted networks."
         ),
         1883 to PortRisk(
             Severity.LOW,

@@ -14,7 +14,7 @@ Kotlin · Jetpack Compose · Android 8.0+ (API 26) · targets API 36.
 
 **Network assessment**
 - Device discovery on your private Wi-Fi/Ethernet network via TCP sweep, SSDP/mDNS/NetBIOS and SNMP, with naming, vendor/type classification, and MAC recovery from the router's ARP table where SNMP is readable.
-- Service fingerprinting (SSH, FTP, SMTP, HTTP, MySQL/MariaDB, Redis…) with per-service risk flags and specific fixes.
+- Service fingerprinting (SSH, FTP, SMTP, HTTP, MySQL/MariaDB, Redis, Memcached, Elasticsearch, BIND/unbound, Apache/nginx/IIS/Jetty/lighttpd/Tomcat…) with per-service risk flags, version→CVE matching, and specific fixes.
 - Opt-in background monitoring that alerts on new/departed devices and port changes (matched by MAC, so a DHCP change isn't a false positive).
 
 **Website audit**
@@ -81,6 +81,8 @@ Licensed under the **Apache License 2.0** — see [LICENSE](LICENSE). You're fre
 ---
 
 ## Changelog
+
+**1.15.0** — Closes the loop on the expanded CVE database by teaching Sentinel to fingerprint more services: Memcached (`version`), Elasticsearch (REST version, and an exposed-cluster warning), BIND/unbound (`version.bind` CHAOS query), and Jetty/lighttpd/Tomcat from their `Server` header — so hundreds of previously-dormant CVEs now match. Adds Elasticsearch/Memcached exposure checks, end-of-life flagging for PostgreSQL/Elasticsearch/BIND, and a note on version-based findings reminding you that distros backport fixes without changing the version string.
 
 **1.14.0** — Much larger, fully-offline CVE database. The vulnerability feed now pulls the complete CVE history for every service Sentinel fingerprints (SSH, web, FTP, mail, database and DNS daemons) instead of a recent slice, with far better version-range extraction (inclusive/exclusive bounds and pinned versions), and the whole database is baked into the app so a fresh install matches CVEs with no network. The in-app Update still refreshes it between releases.
 

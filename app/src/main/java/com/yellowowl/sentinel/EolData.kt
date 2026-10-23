@@ -24,7 +24,20 @@ object EolData {
         "mariadb" to mapOf(
             "5.5" to "MariaDB 5.5", "10.0" to "MariaDB 10.0", "10.1" to "MariaDB 10.1",
             "10.2" to "MariaDB 10.2", "10.3" to "MariaDB 10.3", "10.4" to "MariaDB 10.4", "10.5" to "MariaDB 10.5"
-        ).withNote("Upgrade to a maintained MariaDB release (11.x or a current 10.6+ LTS).")
+        ).withNote("Upgrade to a maintained MariaDB release (11.x or a current 10.6+ LTS)."),
+        "postgresql" to mapOf(
+            "9" to "PostgreSQL 9.x", "10" to "PostgreSQL 10", "11" to "PostgreSQL 11",
+            "12" to "PostgreSQL 12", "13" to "PostgreSQL 13"
+        ).withNote("Upgrade to a supported PostgreSQL major (14+); each major gets five years of fixes."),
+        "elasticsearch" to mapOf(
+            "1" to "Elasticsearch 1.x", "2" to "Elasticsearch 2.x",
+            "5" to "Elasticsearch 5.x", "6" to "Elasticsearch 6.x"
+        ).withNote("Upgrade to a supported Elasticsearch major (8.x); these are end-of-life."),
+        "bind" to mapOf(
+            "9.4" to "BIND 9.4", "9.5" to "BIND 9.5", "9.6" to "BIND 9.6", "9.7" to "BIND 9.7",
+            "9.8" to "BIND 9.8", "9.9" to "BIND 9.9", "9.10" to "BIND 9.10", "9.11" to "BIND 9.11",
+            "9.12" to "BIND 9.12", "9.13" to "BIND 9.13", "9.14" to "BIND 9.14", "9.15" to "BIND 9.15"
+        ).withNote("Upgrade to a maintained BIND 9 branch (9.18+ stable or the current ESV).")
     )
 
     private fun Map<String, String>.withNote(note: String): Map<String, String> =

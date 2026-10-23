@@ -106,6 +106,9 @@ data class KnownVuln(
             ?: range.fixed?.let { "Upgrade ${fingerprint.product} to $it or later." }
             ?: range.lastAffected?.let { "Upgrade ${fingerprint.product} to a release later than $it." }
             ?: "Apply the vendor's patch or mitigation for $id."
+        // Banner/handshake version matching can over-report: Linux distros backport security fixes without
+        // changing the upstream version string, so verify against the installed package before acting.
+        val backportNote = "Matched on the reported version — confirm against the installed package, as distributions backport fixes without changing the version number."
         return Finding(
             title = (if (kev) "[KEV] " else "") + "$id in ${fingerprint.display}",
             severity = severity,
@@ -119,7 +122,7 @@ data class KnownVuln(
                 append(exploitNote)
                 append(epssNote)
             }.trim(),
-            remediation = listOfNotNull(fix, referenceUrl?.let { "Details: $it" }).joinToString(" ")
+            remediation = listOfNotNull(fix, backportNote, referenceUrl?.let { "Details: $it" }).joinToString(" ")
         )
     }
 

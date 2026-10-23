@@ -32,6 +32,16 @@ class EolDataTest {
         assertNull(EolData.eolNote("php", null))
     }
 
+    @Test fun handlesNewlyFingerprintedProducts() {
+        assertNotNull(EolData.eolNote("postgresql", "11.19"))     // major "11"
+        assertNotNull(EolData.eolNote("postgresql", "9.6.24"))    // 9.x via major "9"
+        assertNull(EolData.eolNote("postgresql", "16.2"))         // supported
+        assertNotNull(EolData.eolNote("elasticsearch", "6.8.23")) // major "6"
+        assertNull(EolData.eolNote("elasticsearch", "8.11.0"))    // supported
+        assertNotNull(EolData.eolNote("bind", "9.11.3"))          // EOL 9.11 branch
+        assertNull(EolData.eolNote("bind", "9.18.21"))            // supported branch, not flagged
+    }
+
     @Test fun findingHasMediumSeverityAndTarget() {
         val f = EolData.finding("192.168.1.0/24", "192.168.1.5:80", ServiceFingerprint("php", "8.1.2"))!!
         assertEquals(Severity.MEDIUM, f.severity)
