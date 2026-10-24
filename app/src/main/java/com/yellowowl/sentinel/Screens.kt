@@ -1791,6 +1791,10 @@ internal fun SettingsScreen(
     onShodanChange: (String) -> Unit,
     vtKey: String,
     onVtChange: (String) -> Unit,
+    cloudLookup: Boolean,
+    onCloudLookupChange: (Boolean) -> Unit,
+    fingerbankKey: String,
+    onFingerbankChange: (String) -> Unit,
     historyCount: Int,
     onOpenHistory: () -> Unit,
     onBack: () -> Unit,
@@ -1801,6 +1805,7 @@ internal fun SettingsScreen(
     var scopeDraft by rememberSaveable(scopeText) { mutableStateOf(scopeText) }
     var shodanDraft by rememberSaveable(shodanKey) { mutableStateOf(shodanKey) }
     var vtDraft by rememberSaveable(vtKey) { mutableStateOf(vtKey) }
+    var fingerbankDraft by rememberSaveable(fingerbankKey) { mutableStateOf(fingerbankKey) }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -1875,6 +1880,34 @@ internal fun SettingsScreen(
                 ToolField(vtDraft, { vtDraft = it }, "VirusTotal API key", enabled = true, onGo = { onVtChange(vtDraft) })
                 OutlinedButton(onClick = { onShodanChange(shodanDraft); onVtChange(vtDraft) }, enabled = shodanDraft != shodanKey || vtDraft != vtKey, border = BorderStroke(1.dp, Border)) {
                     Text("Save keys", color = Accent)
+                }
+            }
+        }
+
+        // ---- Online device lookup (opt-in) ----
+        item {
+            SettingsCard(Icons.Filled.Public, "DEVICE NAMES", "Online lookup (optional)") {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Look devices up online", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            "Off by default. When on, Sentinel fills in a maker/model for devices that don't reveal one on the network — by sending a device's MAC and name to a lookup service. Local results always win; nothing is sent while this is off.",
+                            color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(
+                        checked = cloudLookup,
+                        onCheckedChange = onCloudLookupChange,
+                        colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent)
+                    )
+                }
+                if (cloudLookup) {
+                    Text("Maker from MAC works without a key. For a model/type guess, add a free Fingerbank API key (fingerbank.org). Stored only on this device.", color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+                    ToolField(fingerbankDraft, { fingerbankDraft = it }, "Fingerbank API key (optional)", enabled = true, onGo = { onFingerbankChange(fingerbankDraft) })
+                    OutlinedButton(onClick = { onFingerbankChange(fingerbankDraft) }, enabled = fingerbankDraft != fingerbankKey, border = BorderStroke(1.dp, Border)) {
+                        Text("Save key", color = Accent)
+                    }
                 }
             }
         }

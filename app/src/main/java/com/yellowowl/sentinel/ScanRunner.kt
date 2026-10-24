@@ -77,7 +77,9 @@ object ScanRunner {
         WatchSync.publish(app)
         try {
             val profile = SentinelSettings.scanProfile(app)
-            val result = NetworkScanner.scanLocalNetwork(range, app, profile) { progress -> onProgress(app, progress) }
+            val scanned = NetworkScanner.scanLocalNetwork(range, app, profile) { progress -> onProgress(app, progress) }
+            // Opt-in only: fill maker/model gaps from online sources. A no-op (and no network) when disabled.
+            val result = DeviceCloud.enrich(scanned, SentinelSettings.cloudLookupEnabled(app), SentinelSettings.fingerbankKey(app))
             // Open-port risks plus any CVEs that match the fingerprinted service versions.
             val cveFindings = result.devices.flatMap { VulnStore.matcher().findingsFor(result.cidr, it) }
             val run = NetworkFindings.from(result) + cveFindings

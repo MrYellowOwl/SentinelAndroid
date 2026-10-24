@@ -102,6 +102,8 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
     val scopeText by vm.scopeText.collectAsState()
     val shodanKey by vm.shodanKey.collectAsState()
     val vtKey by vm.vtKey.collectAsState()
+    val cloudLookup by vm.cloudLookup.collectAsState()
+    val fingerbankKey by vm.fingerbankKey.collectAsState()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Dashboard) }
     var findingsFilter by rememberSaveable { mutableStateOf<Severity?>(null) }
     var hostDetailIp by rememberSaveable { mutableStateOf<String?>(null) }
@@ -234,6 +236,10 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onShodanChange = vm::setShodanKey,
                 vtKey = vtKey,
                 onVtChange = vm::setVtKey,
+                cloudLookup = cloudLookup,
+                onCloudLookupChange = vm::setCloudLookup,
+                fingerbankKey = fingerbankKey,
+                onFingerbankChange = vm::setFingerbankKey,
                 historyCount = history.size,
                 onOpenHistory = { showHistory = true },
                 onBack = { showSettings = false },

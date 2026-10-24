@@ -122,6 +122,13 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
     val vtKey: StateFlow<String> = _vtKey.asStateFlow()
     fun setVtKey(key: String) { SentinelSettings.setVirusTotalKey(app, key); _vtKey.value = key }
 
+    private val _cloudLookup = MutableStateFlow(SentinelSettings.cloudLookupEnabled(application))
+    val cloudLookup: StateFlow<Boolean> = _cloudLookup.asStateFlow()
+    fun setCloudLookup(enabled: Boolean) { SentinelSettings.setCloudLookupEnabled(app, enabled); _cloudLookup.value = enabled }
+    private val _fingerbankKey = MutableStateFlow(SentinelSettings.fingerbankKey(application))
+    val fingerbankKey: StateFlow<String> = _fingerbankKey.asStateFlow()
+    fun setFingerbankKey(key: String) { SentinelSettings.setFingerbankKey(app, key); _fingerbankKey.value = key }
+
     // ---- Device nicknames ----
     val nicknames: StateFlow<Map<String, String>> = NicknameStore.names
     fun setNickname(device: DeviceResult, name: String) = NicknameStore.set(app, Nicknames.keyFor(device), name)

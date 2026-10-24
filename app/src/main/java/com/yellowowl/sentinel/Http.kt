@@ -58,6 +58,40 @@ object Http {
         null
     }
 
+    /** Minimal JSON POST (no redirect handling). Used by opt-in online device lookup. */
+    suspend fun postJson(
+        urlString: String,
+        json: String,
+        timeoutMillis: Int = 8_000,
+        maxBytes: Int = 256 * 1024,
+        extraHeaders: Map<String, String> = emptyMap()
+    ): Result? = withContext(Dispatchers.IO) {
+        val url = runCatching { URI(urlString).toURL() }.getOrNull() ?: return@withContext null
+        val connection = runCatching { url.openConnection() as HttpURLConnection }.getOrNull() ?: return@withContext null
+        try {
+            connection.connectTimeout = timeoutMillis
+            connection.readTimeout = timeoutMillis
+            connection.instanceFollowRedirects = false
+            connection.requestMethod = "POST"
+            connection.doOutput = true
+            connection.useCaches = false
+            connection.setRequestProperty("User-Agent", USER_AGENT)
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Accept", "application/json")
+            extraHeaders.forEach { (k, v) -> connection.setRequestProperty(k, v) }
+            connection.outputStream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+            val code = try { connection.responseCode } catch (_: Exception) { return@withContext null }
+            val headers = WebChecks.normalizeHeaders(connection.headerFields)
+            val stream = if (code in 200..399) connection.inputStream else connection.errorStream
+            val body = stream?.let { readCapped(it, maxBytes) }.orEmpty()
+            Result(code, headers, body, url)
+        } catch (_: Exception) {
+            null
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private fun readCapped(stream: java.io.InputStream, maxBytes: Int): String {
         val buffer = java.io.ByteArrayOutputStream()
         val chunk = ByteArray(8192)
