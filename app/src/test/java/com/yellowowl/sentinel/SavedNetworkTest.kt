@@ -59,6 +59,33 @@ class SavedNetworkTest {
         assertTrue(second.devices.indexOf(moved) < second.devices.indexOf(gone))
     }
 
+    @Test fun identityIsStickyWhenARescanResolvesNothing() {
+        // Scan 1 resolved a name/vendor/model; scan 2 (same device by MAC) came back bare.
+        val named = SavedDevice(mac = "bb:bb:bb:bb:bb:bb", ip = "192.168.1.5", name = "living-room-tv", vendor = "Samsung", model = "UN55", kind = "TV / media")
+        val s1 = NetworkMerge.mergeScan(
+            null, "net1", "Home", null, null, "192.168.1.0/24", "192.168.1.1", null,
+            listOf(named), now = 1000L
+        )
+        val s2 = NetworkMerge.mergeScan(
+            s1, "net1", "Home", null, null, "192.168.1.0/24", "192.168.1.1", null,
+            listOf(SavedDevice(mac = "bb:bb:bb:bb:bb:bb", ip = "192.168.1.5")),   // nothing resolved this time
+            now = 5000L
+        )
+        val d = s2.devices.single()
+        assertEquals("living-room-tv", d.name)   // kept, not overwritten with null
+        assertEquals("Samsung", d.vendor)
+        assertEquals("UN55", d.model)
+        assertEquals("TV / media", d.kind)
+        assertEquals(5000L, d.lastSeen)
+        // A later scan that DOES resolve a new name replaces it.
+        val s3 = NetworkMerge.mergeScan(
+            s2, "net1", "Home", null, null, "192.168.1.0/24", "192.168.1.1", null,
+            listOf(SavedDevice(mac = "bb:bb:bb:bb:bb:bb", ip = "192.168.1.5", name = "samsung-tv")),
+            now = 9000L
+        )
+        assertEquals("samsung-tv", s3.devices.single().name)
+    }
+
     @Test fun dedupesDevicesSharingAnIdentityWithinOneScan() {
         // Same MAC reported on two IPs (ARP quirk) must collapse to one row — two rows with the same
         // device key would crash the list UI on a duplicate key.

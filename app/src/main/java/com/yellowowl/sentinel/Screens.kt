@@ -95,6 +95,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -813,6 +814,8 @@ internal fun FindingsScreen(
     val visible = remember(findings, filter) {
         FindingMerge.prioritized(findings).filter { filter == null || it.severity == filter }
     }
+    // Accordion expansion per severity; the highest non-empty group starts open, the rest collapsed.
+    val expandedSev = remember { mutableStateMapOf<Severity, Boolean>() }
 
     if (confirmClear) {
         AlertDialog(
@@ -892,8 +895,44 @@ internal fun FindingsScreen(
                 }
             }
         } else {
-            items(visible, key = { it.id }) { finding -> FindingCard(finding, onDismiss = { onDismiss(finding.id) }) }
+            // Grouped into collapsible accordion sections by severity (highest first).
+            val groups = Severity.entries.mapNotNull { sev ->
+                visible.filter { it.severity == sev }.takeIf { it.isNotEmpty() }?.let { sev to it }
+            }
+            groups.forEachIndexed { index, (sev, group) ->
+                val isOpen = expandedSev[sev] ?: (index == 0)
+                item(key = "sev-${sev.name}") {
+                    SeveritySectionHeader(sev, group.size, isOpen) { expandedSev[sev] = !isOpen }
+                }
+                if (isOpen) {
+                    items(group, key = { it.id }) { finding -> FindingCard(finding, onDismiss = { onDismiss(finding.id) }) }
+                }
+            }
         }
+    }
+}
+
+/** Collapsible accordion header for a severity group on the Findings screen. */
+@Composable
+private fun SeveritySectionHeader(severity: Severity, count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    val color = severity.color()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(10.dp).background(color, CircleShape))
+        Spacer(Modifier.width(10.dp))
+        Text(severity.label, color = color, fontWeight = FontWeight.Bold, fontSize = 15.sp, modifier = Modifier.weight(1f))
+        Text("$count", color = TextMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.width(6.dp))
+        Icon(
+            if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            contentDescription = if (expanded) "Collapse" else "Expand",
+            tint = TextMuted, modifier = Modifier.size(22.dp)
+        )
     }
 }
 
@@ -1082,6 +1121,7 @@ internal fun HostDetailScreen(
 ) {
     val ordered = remember(findings) { FindingMerge.prioritized(findings) }
     val openCount = ordered.count { annotations[it.key]?.status.let { s -> s != FindingStatus.FIXED && s != FindingStatus.FALSE_POSITIVE } }
+    val expandedSev = remember { mutableStateMapOf<Severity, Boolean>() }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -1203,15 +1243,27 @@ internal fun HostDetailScreen(
                 }
             }
         } else {
-            items(ordered, key = { it.key }) { finding ->
-                WalkthroughFindingCard(
-                    finding = finding,
-                    annotation = annotations[finding.key],
-                    onStatus = { onStatus(finding, it) },
-                    onNotes = { onNotes(finding, it) },
-                    onOpenUrl = onOpenUrl,
-                    onCopy = onCopy
-                )
+            // Grouped into collapsible accordion sections by severity (highest first).
+            val groups = Severity.entries.mapNotNull { sev ->
+                ordered.filter { it.severity == sev }.takeIf { it.isNotEmpty() }?.let { sev to it }
+            }
+            groups.forEachIndexed { index, (sev, group) ->
+                val isOpen = expandedSev[sev] ?: (index == 0)
+                item(key = "dsev-${sev.name}") {
+                    SeveritySectionHeader(sev, group.size, isOpen) { expandedSev[sev] = !isOpen }
+                }
+                if (isOpen) {
+                    items(group, key = { it.key }) { finding ->
+                        WalkthroughFindingCard(
+                            finding = finding,
+                            annotation = annotations[finding.key],
+                            onStatus = { onStatus(finding, it) },
+                            onNotes = { onNotes(finding, it) },
+                            onOpenUrl = onOpenUrl,
+                            onCopy = onCopy
+                        )
+                    }
+                }
             }
         }
     }

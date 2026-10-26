@@ -84,8 +84,15 @@ object NetworkMerge {
             // between scans (intermittent SNMP/ARP recovery) updates its row instead of spawning a twin.
             val was = priorByKey[key] ?: priorDevices.firstOrNull { it.ip == d.ip && keyOf(it) !in consumed }
             if (was != null) consumed.add(keyOf(was))
+            // Identity is sticky: name/vendor/model/type resolve best-effort and a device won't answer
+            // mDNS/NetBIOS/reverse-DNS on every scan, so keep what we learned before when this scan came
+            // back blank. A later scan that DOES resolve a non-blank value replaces it.
             merged.add(
                 d.copy(
+                    name = d.name?.takeIf { it.isNotBlank() } ?: was?.name,
+                    vendor = d.vendor?.takeIf { it.isNotBlank() } ?: was?.vendor,
+                    model = d.model?.takeIf { it.isNotBlank() } ?: was?.model,
+                    kind = d.kind?.takeIf { it.isNotBlank() } ?: was?.kind,
                     firstSeen = was?.firstSeen?.takeIf { it > 0 } ?: now,
                     lastSeen = now,
                     online = true
