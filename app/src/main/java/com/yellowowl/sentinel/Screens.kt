@@ -705,9 +705,14 @@ private fun DeviceRow(d: SavedDevice, nicknames: Map<String, String>, onClick: (
 internal fun WebsiteAuditScreen(
     modifier: Modifier,
     state: WebUiState,
+    securityMode: Boolean,
     onUrlChange: (String) -> Unit,
     onWpChecksChange: (Boolean) -> Unit,
-    onRun: () -> Unit
+    onRun: () -> Unit,
+    onShareSite: (ReportExporter.Format) -> Unit = {},
+    onPrintSite: () -> Unit = {},
+    onOpenUrl: (String) -> Unit = {},
+    onCopy: (String) -> Unit = {}
 ) {
     val focusManager = LocalFocusManager.current
     val run = {
@@ -718,7 +723,8 @@ internal fun WebsiteAuditScreen(
         modifier = modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        ScreenHeading("Website audit", "Checks HTTPS, the TLS certificate, security headers and cookies.")
+        if (securityMode) ScreenHeading("Website security", "Checks HTTPS, the TLS certificate, security headers and cookies.")
+        else ScreenHeading("Website intake", "A full developer snapshot: hosting, DNS, registrar, cert, stack, integrations and SEO — exportable.")
         SurfaceCard {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -734,10 +740,11 @@ internal fun WebsiteAuditScreen(
                     keyboardActions = KeyboardActions(onGo = { run() })
                 )
                 Text(
-                    "Only audit sites you own or are authorized to test. Sentinel sends a few ordinary page requests; it never submits forms or attacks the site.",
+                    if (securityMode) "Only audit sites you own or are authorized to test. Sentinel sends a few ordinary page requests; it never submits forms or attacks the site."
+                    else "Pulls public info (DNS, WHOIS, the cert, one homepage fetch). Read-only — nothing is submitted or attacked. Switch to security mode in Settings.",
                     color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp
                 )
-                Row(
+                if (securityMode) Row(
                     Modifier.fillMaxWidth().toggleable(value = state.wpChecks, enabled = !state.busy, role = Role.Switch, onValueChange = onWpChecksChange),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -749,7 +756,7 @@ internal fun WebsiteAuditScreen(
                     Switch(checked = state.wpChecks, onCheckedChange = null, enabled = !state.busy, colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent))
                 }
                 PrimaryButton(
-                    text = if (state.busy) "Auditing…" else "Run audit",
+                    text = if (state.busy) (if (securityMode) "Auditing…" else "Building report…") else (if (securityMode) "Run audit" else "Build intake report"),
                     icon = Icons.Filled.PlayArrow,
                     enabled = !state.busy && state.url.isNotBlank(),
                     busy = state.busy,
@@ -787,10 +794,128 @@ internal fun WebsiteAuditScreen(
             result.findings.forEach { FindingCard(it) }
         }
 
-        Text(
+        state.siteProfile?.let { p ->
+            SiteProfileReport(p, onShareSite = onShareSite, onPrintSite = onPrintSite, onOpenUrl = onOpenUrl, onCopy = onCopy)
+        }
+
+        if (securityMode) Text(
             "This is a baseline configuration check, not a full penetration test. Missing headers are recommendations, not proof that the site can be hacked.",
             color = TextMuted, fontSize = 12.sp, lineHeight = 17.sp
         )
+    }
+}
+
+// ---------------------------------------------------------------- Web developer intake report
+
+@Composable
+private fun SiteProfileReport(
+    p: SiteProfile,
+    onShareSite: (ReportExporter.Format) -> Unit,
+    onPrintSite: () -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onCopy: (String) -> Unit
+) {
+    // Export row.
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Eyebrow("INTAKE REPORT · ${p.domain}")
+            Text("Export the full report, or copy individual values below.", color = TextMuted, fontSize = 12.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onShareSite(ReportExporter.Format.HTML) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
+                    Icon(Icons.Filled.Share, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share", fontWeight = FontWeight.Bold)
+                }
+                OutlinedButton(onClick = onPrintSite, border = BorderStroke(1.dp, Border)) { Text("PDF", color = Accent) }
+                OutlinedButton(onClick = { onShareSite(ReportExporter.Format.CSV) }, border = BorderStroke(1.dp, Border)) { Text("CSV", color = Accent) }
+                OutlinedButton(onClick = { onShareSite(ReportExporter.Format.JSON) }, border = BorderStroke(1.dp, Border)) { Text("JSON", color = Accent) }
+            }
+        }
+    }
+
+    val ms = { x: Long? -> x?.let { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it)) } }
+
+    WebInfoCard("OVERVIEW", listOf(
+        "Domain" to p.domain,
+        "Canonical" to p.canonicalUrl,
+        "Prefers" to (if (p.usesWww) "www" else "apex (no www)"),
+        "Forces HTTPS" to (if (p.httpsRedirect) "Yes" else "No"),
+        "Final URL" to p.finalUrl,
+        "HTTP status" to p.statusCode?.toString(),
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("HOSTING & NETWORK", listOf(
+        "IP" to p.ip, "Hosting" to p.hostingProvider, "ASN / org" to p.asn, "CDN" to p.cdn,
+        "Server" to p.serverHeader, "X-Powered-By" to p.poweredBy,
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("DOMAIN & REGISTRAR", listOf(
+        "Registrar" to p.registrar, "Created" to p.domainCreated, "Updated" to p.domainUpdated, "Expires" to p.domainExpiry,
+        "DNS host" to p.dnsHost, "Name servers" to p.nameServers.joinToString(", ").ifBlank { null },
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("CERTIFICATE", listOf(
+        "Issuer" to p.certIssuer, "Subject" to p.certSubject,
+        "Valid from" to ms(p.certValidFrom), "Expires" to ms(p.certValidTo),
+        "Signature" to p.certSigAlg, "SANs" to p.certSans.joinToString(", ").ifBlank { null },
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("EMAIL", listOf(
+        "Provider" to p.emailProvider, "SPF" to (if (p.spf) "Yes" else "No"),
+        "DMARC" to (if (p.dmarc) "Yes" else "No"), "DKIM" to (if (p.dkimHint) "Detected" else "Not detected"),
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("PLATFORM & STACK", listOf(
+        "CMS / platform" to p.cms, "Admin login" to p.cmsAdminPath, "Framework" to p.framework,
+        "Page builder" to p.pageBuilder, "Fonts" to p.fonts.joinToString(", ").ifBlank { null },
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("THIRD-PARTY INTEGRATIONS", p.integrations.map { it.category to it.name }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("IDS TO MIGRATE", p.analyticsIds.map { it.kind to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("SEO & META", listOf(
+        "Title" to p.title, "Description" to p.description, "Canonical" to p.canonicalLink,
+        "Viewport" to p.viewport, "Schema" to p.schemaTypes.joinToString(", ").ifBlank { null },
+        "Copyright" to p.copyrightYear,
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("BUSINESS", listOf(
+        "Name" to p.businessName, "Phone" to p.businessPhone, "Address" to p.businessAddress,
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("STRUCTURE", listOf(
+        "robots.txt" to (if (p.robotsFound) "Found" else "Not found"),
+        "Pages (sitemap)" to p.pageCount?.toString(),
+        "Sitemaps" to p.sitemapUrls.joinToString("\n").ifBlank { null },
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("SOCIAL", emptyList(), linkRows = p.socialLinks, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("ONLINE PRESENCE (SEARCH)", emptyList(), linkRows = p.presenceSearches, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("DNS RECORDS", p.dns.map { it.type to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    if (p.notes.isNotEmpty()) WebInfoCard("NOTES", p.notes.map { "⚠" to it }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+}
+
+@Composable
+private fun WebInfoCard(
+    title: String,
+    rows: List<Pair<String, String?>>,
+    linkRows: List<SiteLink> = emptyList(),
+    onCopy: (String) -> Unit,
+    onOpenUrl: (String) -> Unit
+) {
+    val shown = rows.filter { !it.second.isNullOrBlank() }
+    if (shown.isEmpty() && linkRows.isEmpty()) return
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Eyebrow(title)
+            Spacer(Modifier.height(4.dp))
+            shown.forEach { (label, value) ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onCopy(value.orEmpty()) }.padding(vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(label, color = TextMuted, fontSize = 13.sp, modifier = Modifier.width(120.dp))
+                    Text(value.orEmpty(), color = TextMain, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+                }
+            }
+            linkRows.forEach { link ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onOpenUrl(link.url) }.padding(vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(link.label, color = TextMuted, fontSize = 13.sp, modifier = Modifier.width(120.dp))
+                    Text(link.url, color = Accent, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                }
+            }
+        }
     }
 }
 
@@ -1975,6 +2100,8 @@ internal fun SettingsScreen(
     onCloudLookupChange: (Boolean) -> Unit,
     fingerbankKey: String,
     onFingerbankChange: (String) -> Unit,
+    webSecurityMode: Boolean,
+    onWebModeChange: (Boolean) -> Unit,
     historyCount: Int,
     onOpenHistory: () -> Unit,
     onBack: () -> Unit,
@@ -2015,6 +2142,24 @@ internal fun SettingsScreen(
                         onCheckedChange = onThemeChange,
                         colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent)
                     )
+                }
+            }
+        }
+
+        // ---- Web scanner mode ----
+        item {
+            SettingsCard(Icons.Filled.Language, "WEB SCANNER", "Mode") {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("Security mode", color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            if (webSecurityMode) "On — the website tool runs the security audit (HTTPS, TLS, headers, cookies, WordPress)."
+                            else "Off — the website tool builds a developer intake report (hosting, DNS, registrar, cert, stack, integrations, SEO). Turn on for the security audit instead.",
+                            color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Switch(checked = webSecurityMode, onCheckedChange = onWebModeChange, colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = Accent))
                 }
             }
         }

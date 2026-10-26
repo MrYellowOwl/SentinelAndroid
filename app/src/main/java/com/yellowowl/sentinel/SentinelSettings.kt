@@ -16,6 +16,7 @@ object SentinelSettings {
     private const val KEY_SCAN_SCHEDULE = "scan_schedule"
     private const val KEY_SCOPE = "engagement_scope"
     private const val KEY_SHODAN = "shodan_key"
+    private const val KEY_WEB_SECURITY_MODE = "web_security_mode"
     private const val KEY_CLOUD_LOOKUP = "cloud_lookup"
     private const val KEY_FINGERBANK = "fingerbank_key"
     private const val KEY_VT = "virustotal_key"
@@ -75,6 +76,9 @@ object SentinelSettings {
     fun setShodanKey(context: Context, key: String) { prefs(context).edit().putString(KEY_SHODAN, key.trim()).apply() }
     fun virusTotalKey(context: Context): String = prefs(context).getString(KEY_VT, "").orEmpty()
     fun setVirusTotalKey(context: Context, key: String) { prefs(context).edit().putString(KEY_VT, key.trim()).apply() }
+
+    fun webSecurityMode(context: Context): Boolean = prefs(context).getBoolean(KEY_WEB_SECURITY_MODE, false)
+    fun setWebSecurityMode(context: Context, enabled: Boolean) { prefs(context).edit().putBoolean(KEY_WEB_SECURITY_MODE, enabled).apply() }
 
     fun cloudLookupEnabled(context: Context): Boolean = prefs(context).getBoolean(KEY_CLOUD_LOOKUP, false)
     fun setCloudLookupEnabled(context: Context, enabled: Boolean) { prefs(context).edit().putBoolean(KEY_CLOUD_LOOKUP, enabled).apply() }

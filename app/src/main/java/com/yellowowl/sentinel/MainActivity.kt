@@ -104,6 +104,7 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
     val vtKey by vm.vtKey.collectAsState()
     val cloudLookup by vm.cloudLookup.collectAsState()
     val fingerbankKey by vm.fingerbankKey.collectAsState()
+    val webSecurityMode by vm.webSecurityMode.collectAsState()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Dashboard) }
     var findingsFilter by rememberSaveable { mutableStateOf<Severity?>(null) }
     var hostDetailIp by rememberSaveable { mutableStateOf<String?>(null) }
@@ -240,6 +241,8 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onCloudLookupChange = vm::setCloudLookup,
                 fingerbankKey = fingerbankKey,
                 onFingerbankChange = vm::setFingerbankKey,
+                webSecurityMode = webSecurityMode,
+                onWebModeChange = vm::setWebSecurityMode,
                 historyCount = history.size,
                 onOpenHistory = { showHistory = true },
                 onBack = { showSettings = false },
@@ -317,9 +320,14 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
             AppScreen.Website -> WebsiteAuditScreen(
                 modifier = modifier,
                 state = web,
+                securityMode = webSecurityMode,
                 onUrlChange = vm::setUrl,
                 onWpChecksChange = vm::setWpChecks,
-                onRun = vm::runAudit
+                onRun = vm::runAudit,
+                onShareSite = { fmt -> web.siteProfile?.let { if (!ReportExporter.shareSite(context, it, fmt)) Toast.makeText(context, "No app available to share the report.", Toast.LENGTH_SHORT).show() } },
+                onPrintSite = { web.siteProfile?.let { ReportExporter.printSitePdf(context, it) } },
+                onOpenUrl = openUrl,
+                onCopy = copyText
             )
             AppScreen.Tools -> ToolsScreen(
                 modifier = modifier,

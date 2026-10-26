@@ -34,6 +34,7 @@ data class WebUiState(
     val wpChecks: Boolean = false,
     val result: WebsiteAuditResult? = null,
     val wpDetected: Boolean? = null,
+    val siteProfile: SiteProfile? = null,
     val error: String? = null
 )
 
@@ -273,10 +274,23 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
         _web.update { it.copy(wpChecks = enabled) }
     }
 
+    private val _webSecurityMode = MutableStateFlow(SentinelSettings.webSecurityMode(application))
+    val webSecurityMode: StateFlow<Boolean> = _webSecurityMode.asStateFlow()
+    fun setWebSecurityMode(enabled: Boolean) { SentinelSettings.setWebSecurityMode(app, enabled); _webSecurityMode.value = enabled }
+
     fun runAudit() {
         val state = _web.value
         if (state.busy || state.url.isBlank()) return
-        _web.update { it.copy(busy = true, error = null, result = null, wpDetected = null) }
+        _web.update { it.copy(busy = true, error = null, result = null, wpDetected = null, siteProfile = null) }
+        // Web-developer intake mode (default): a comprehensive site profile, not a security scan.
+        if (!_webSecurityMode.value) {
+            viewModelScope.launch {
+                SiteIntake.collect(state.url)
+                    .onSuccess { profile -> _web.update { it.copy(busy = false, siteProfile = profile) } }
+                    .onFailure { e -> _web.update { it.copy(busy = false, error = e.message ?: "Couldn't build the intake report.") } }
+            }
+            return
+        }
         viewModelScope.launch {
             try {
                 val result = WebsiteAuditor.audit(state.url)

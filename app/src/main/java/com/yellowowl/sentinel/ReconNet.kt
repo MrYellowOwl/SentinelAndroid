@@ -73,7 +73,8 @@ object ReconNet {
                         async { runCatching { ssdp(windowMillis) }.getOrDefault(emptyMap()) },
                         async { runCatching { mdns(windowMillis) }.getOrDefault(emptyMap()) },
                         async { runCatching { netbios(hosts, windowMillis) }.getOrDefault(emptyMap()) },
-                        async { runCatching { snmp(hosts, range.gatewayIp, windowMillis) }.getOrDefault(emptyMap()) }
+                        async { runCatching { snmp(hosts, range.gatewayIp, windowMillis) }.getOrDefault(emptyMap()) },
+                        async { runCatching { arp() }.getOrDefault(emptyMap()) }
                     ).awaitAll()
                 }
                 mergeByIp(maps)
@@ -81,6 +82,12 @@ object ReconNet {
                 runCatching { multicastLock?.release() }
             }
         }
+
+    /** Best-effort kernel ARP cache read: MAC (+ OUI vendor) per IP. Empty on sandboxed Android. */
+    private fun arp(): Map<String, DeviceIdentity> {
+        val text = runCatching { java.io.File("/proc/net/arp").readText() }.getOrNull() ?: return emptyMap()
+        return ArpTable.parse(text).mapValues { (_, mac) -> DeviceIdentity(mac = mac, vendor = Oui.vendor(mac)) }
+    }
 
     private fun mergeByIp(maps: List<Map<String, DeviceIdentity>>): Map<String, DeviceIdentity> {
         val merged = HashMap<String, DeviceIdentity>()
