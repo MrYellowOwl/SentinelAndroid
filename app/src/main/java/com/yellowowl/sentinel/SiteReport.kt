@@ -38,6 +38,18 @@ object SiteReport {
         sb.append("<h1>Website intake — ${esc(p.domain)}</h1>")
         sb.append("<div class=\"sub\">Generated $generated · Sentinel $appVersion</div>")
 
+        if (p.seoScore != null || p.aiScore != null) section("Scores") {
+            row("SEO score", p.seoScore?.let { "$it / 100 (${p.seoGrade})" })
+            row("AI Visibility score", p.aiScore?.let { "$it / 100 (${p.aiGrade})" })
+            row("Blocks AI crawlers", p.aiCrawlersBlocked.joinToString(", ").ifBlank { null })
+            row("llms.txt", if (p.llmsTxt) "Present" else "Absent")
+        }
+        if (p.attentionFlags.isNotEmpty()) {
+            sb.append("<h2>Needs attention</h2><ul>")
+            p.attentionFlags.forEach { sb.append("<li class=\"note\">${esc(it)}</li>") }
+            sb.append("</ul>")
+        }
+
         section("Overview") {
             row("Domain", p.domain)
             row("Canonical URL", p.canonicalUrl)
@@ -49,10 +61,23 @@ object SiteReport {
         section("Hosting & network") {
             row("IP address", p.ip)
             row("Hosting provider", p.hostingProvider)
+            row("Location", p.hostingLocation)
             row("ASN / org", p.asn)
             row("CDN", p.cdn)
             row("Server header", p.serverHeader)
             row("X-Powered-By", p.poweredBy)
+        }
+        section("Performance") {
+            row("Response time", p.responseMs?.let { "$it ms" })
+            row("HTML size", p.htmlBytes?.let { "${it / 1024} KB" })
+            row("Scripts", p.scriptCount?.toString())
+            row("Stylesheets", p.stylesheetCount?.toString())
+            row("Render-blocking head scripts", p.scriptsInHead?.toString())
+        }
+        section("DNS security") {
+            row("DNSSEC", if (p.dnssec) "Enabled" else "Not enabled")
+            row("CAA record", if (p.caa) "Present" else "None")
+            row("SSL grade", p.sslGrade)
         }
         section("Domain & registrar") {
             row("Registrar", p.registrar)
@@ -97,6 +122,13 @@ object SiteReport {
         if (p.businessName != null || p.businessPhone != null || p.businessAddress != null) section("Business") {
             row("Name", p.businessName); row("Phone", p.businessPhone); row("Address", p.businessAddress)
         }
+        if (p.contactEmails.isNotEmpty() || p.contactPhones.isNotEmpty()) section("Contacts on page") {
+            p.contactEmails.forEach { row("Email", it) }
+            p.contactPhones.forEach { row("Phone", it) }
+        }
+        if (p.keyPages.isNotEmpty()) section("Key pages") {
+            p.keyPages.forEach { sb.append("<tr><th>${esc(it.label)}</th><td><a href=\"${esc(it.url)}\">${esc(it.url)}</a></td></tr>") }
+        }
         section("Structure") {
             row("robots.txt", yn(p.robotsFound))
             row("Pages (sitemap)", p.pageCount?.toString())
@@ -122,7 +154,17 @@ object SiteReport {
         fun r(k: String, v: String?) { if (!v.isNullOrBlank()) sb.append("${q(k)},${q(v)}\n") }
         r("Domain", p.domain); r("Canonical URL", p.canonicalUrl); r("Prefers", if (p.usesWww) "www" else "apex")
         r("Forces HTTPS", if (p.httpsRedirect) "Yes" else "No"); r("Final URL", p.finalUrl); r("HTTP status", p.statusCode?.toString())
-        r("IP", p.ip); r("Hosting", p.hostingProvider); r("ASN", p.asn); r("CDN", p.cdn)
+        r("SEO score", p.seoScore?.let { "$it (${p.seoGrade})" })
+        r("AI Visibility score", p.aiScore?.let { "$it (${p.aiGrade})" })
+        r("Blocks AI crawlers", p.aiCrawlersBlocked.joinToString("; ").ifBlank { null })
+        r("llms.txt", if (p.llmsTxt) "Present" else "Absent")
+        p.attentionFlags.forEachIndexed { i, f -> r("Attention ${i + 1}", f) }
+        r("IP", p.ip); r("Hosting", p.hostingProvider); r("Location", p.hostingLocation); r("ASN", p.asn); r("CDN", p.cdn)
+        r("Response time", p.responseMs?.let { "$it ms" }); r("HTML size", p.htmlBytes?.let { "${it / 1024} KB" })
+        r("Scripts", p.scriptCount?.toString()); r("Stylesheets", p.stylesheetCount?.toString())
+        r("DNSSEC", if (p.dnssec) "Enabled" else "No"); r("CAA", if (p.caa) "Present" else "No"); r("SSL grade", p.sslGrade)
+        p.contactEmails.forEach { r("Contact email", it) }; p.contactPhones.forEach { r("Contact phone", it) }
+        p.keyPages.forEach { r("Key page: ${it.label}", it.url) }
         r("Server", p.serverHeader); r("X-Powered-By", p.poweredBy)
         r("Registrar", p.registrar); r("Created", p.domainCreated); r("Updated", p.domainUpdated); r("Expires", p.domainExpiry)
         r("DNS host", p.dnsHost); r("Name servers", p.nameServers.joinToString("; "))
@@ -147,9 +189,19 @@ object SiteReport {
         o.put("tool", "Sentinel $appVersion").put("generatedAt", p.generatedAt)
         o.put("domain", p.domain).put("canonicalUrl", p.canonicalUrl).put("usesWww", p.usesWww)
             .put("forcesHttps", p.httpsRedirect).put("finalUrl", p.finalUrl).put("statusCode", p.statusCode ?: JSONObject.NULL)
+        o.put("scores", JSONObject().put("seo", p.seoScore ?: JSONObject.NULL).put("seoGrade", p.seoGrade ?: JSONObject.NULL)
+            .put("aiVisibility", p.aiScore ?: JSONObject.NULL).put("aiGrade", p.aiGrade ?: JSONObject.NULL)
+            .put("blocksAiCrawlers", arr(p.aiCrawlersBlocked)).put("llmsTxt", p.llmsTxt))
+        o.put("attention", arr(p.attentionFlags))
         o.put("hosting", JSONObject().put("ip", p.ip ?: JSONObject.NULL).put("provider", p.hostingProvider ?: JSONObject.NULL)
+            .put("location", p.hostingLocation ?: JSONObject.NULL)
             .put("asn", p.asn ?: JSONObject.NULL).put("cdn", p.cdn ?: JSONObject.NULL)
             .put("server", p.serverHeader ?: JSONObject.NULL).put("poweredBy", p.poweredBy ?: JSONObject.NULL))
+        o.put("performance", JSONObject().put("responseMs", p.responseMs ?: JSONObject.NULL).put("htmlBytes", p.htmlBytes ?: JSONObject.NULL)
+            .put("scripts", p.scriptCount ?: JSONObject.NULL).put("stylesheets", p.stylesheetCount ?: JSONObject.NULL).put("headScripts", p.scriptsInHead ?: JSONObject.NULL))
+        o.put("dnsSecurity", JSONObject().put("dnssec", p.dnssec).put("caa", p.caa).put("sslGrade", p.sslGrade ?: JSONObject.NULL))
+        o.put("contacts", JSONObject().put("emails", arr(p.contactEmails)).put("phones", arr(p.contactPhones)))
+        o.put("keyPages", JSONArray().apply { p.keyPages.forEach { put(JSONObject().put("label", it.label).put("url", it.url)) } })
         o.put("domainReg", JSONObject().put("registrar", p.registrar ?: JSONObject.NULL).put("created", p.domainCreated ?: JSONObject.NULL)
             .put("updated", p.domainUpdated ?: JSONObject.NULL).put("expires", p.domainExpiry ?: JSONObject.NULL)
             .put("dnsHost", p.dnsHost ?: JSONObject.NULL).put("nameServers", arr(p.nameServers)))

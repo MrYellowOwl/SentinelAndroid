@@ -262,4 +262,72 @@ object SiteSignatures {
     private fun decodeEntities(s: String): String = s
         .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
         .replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'").replace("&nbsp;", " ")
+
+    // --------------------------------------------------------------- structural page signals (for scoring)
+
+    data class PageSignals(
+        val h1Count: Int,
+        val imgCount: Int,
+        val imgWithAlt: Int,
+        val htmlLang: String?,
+        val noindex: Boolean,
+        val hasOpenGraph: Boolean,
+        val wordCount: Int,
+        val scriptCount: Int,
+        val stylesheetCount: Int,
+        val scriptsInHead: Int,
+        val keyPages: List<SiteLink>,
+        val emails: List<String>,
+        val phones: List<String>,
+    )
+
+    private val keyPagePatterns = listOf(
+        "Privacy policy" to listOf("/privacy", "privacy-policy"),
+        "Terms" to listOf("/terms", "terms-of", "/tos"),
+        "Contact" to listOf("/contact"),
+        "About" to listOf("/about"),
+        "Blog" to listOf("/blog", "/news", "/articles"),
+        "Shop / store" to listOf("/shop", "/store", "/products", "/cart"),
+        "Careers" to listOf("/careers", "/jobs"),
+    )
+
+    fun pageSignals(html: String, baseUrl: String?): PageSignals {
+        val lower = html.lowercase()
+        val h1 = Regex("<h1[\\s>]", RegexOption.IGNORE_CASE).findAll(html).count()
+        val imgs = Regex("<img\\b[^>]*>", RegexOption.IGNORE_CASE).findAll(html).map { it.value }.toList()
+        val imgWithAlt = imgs.count { Regex("""\balt\s*=\s*["'][^"']+["']""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+        val htmlLang = Regex("""<html[^>]*\blang\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)?.trim()
+        val robotsMeta = Regex("""<meta[^>]*\bname\s*=\s*["']robots["'][^>]*>""", RegexOption.IGNORE_CASE).find(html)?.value?.lowercase().orEmpty()
+        val noindex = robotsMeta.contains("noindex")
+        val hasOg = lower.contains("property=\"og:") || lower.contains("property='og:")
+        val text = html
+            .replace(Regex("<script\\b[^<]*(?:(?!</script>)<[^<]*)*</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), " ")
+            .replace(Regex("<style\\b[^<]*(?:(?!</style>)<[^<]*)*</style>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), " ")
+            .replace(Regex("<[^>]+>"), " ")
+        val wordCount = text.split(Regex("\\s+")).count { it.length > 1 }
+        val scriptCount = Regex("<script\\b", RegexOption.IGNORE_CASE).findAll(html).count()
+        val stylesheetCount = Regex("""<link[^>]*rel\s*=\s*["'][^"']*stylesheet""", RegexOption.IGNORE_CASE).findAll(html).count()
+        val head = Regex("<head\\b.*?</head>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(html)?.value.orEmpty()
+        val scriptsInHead = Regex("<script\\b[^>]*\\bsrc\\s*=", RegexOption.IGNORE_CASE).findAll(head).count()
+
+        // Links → key pages.
+        val hrefs = Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(html).map { it.groupValues[1] }.toList()
+        fun resolve(href: String): String = when {
+            href.startsWith("http", true) -> href
+            baseUrl == null -> href
+            else -> runCatching { java.net.URI(baseUrl).resolve(href).toString() }.getOrDefault(href)
+        }
+        val keyPages = LinkedHashMap<String, SiteLink>()
+        for ((label, pats) in keyPagePatterns) {
+            val match = hrefs.firstOrNull { h -> pats.any { h.lowercase().contains(it) } }
+            if (match != null && !keyPages.containsKey(label)) keyPages[label] = SiteLink(label, resolve(match))
+        }
+        val emails = (Regex("""mailto:([^"'?\s]+)""", RegexOption.IGNORE_CASE).findAll(html).map { it.groupValues[1] } +
+            Regex("""[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}""").findAll(text).map { it.value })
+            .map { it.lowercase().trim() }.filter { !it.endsWith(".png") && !it.endsWith(".jpg") }.distinct().take(10)
+        val phones = Regex("""tel:([+0-9().\-\s]{7,})""", RegexOption.IGNORE_CASE).findAll(html)
+            .map { it.groupValues[1].trim() }.distinct().take(10).toList()
+
+        return PageSignals(h1, imgs.size, imgWithAlt, htmlLang, noindex, hasOg, wordCount, scriptCount, stylesheetCount, scriptsInHead, keyPages.values.toList(), emails.toList(), phones)
+    }
 }

@@ -33,7 +33,9 @@ object SiteIntake {
         val apex = inputHost.removePrefix("www.")
 
         // 1. Load the homepage, following redirects so we see the canonical host/scheme.
+        val t0 = System.currentTimeMillis()
         val primary = fetch("https://$apex/") ?: fetch("https://www.$apex/") ?: fetch(url.toString())
+        val responseMs = if (primary != null) System.currentTimeMillis() - t0 else null
         if (primary == null) notes.add("Couldn't load the site over HTTPS — hosting/stack fields may be blank; DNS and WHOIS still ran.")
         val finalUrl = primary?.finalUrl
         val canonicalHost = (finalUrl?.host ?: inputHost).lowercase()
@@ -75,12 +77,14 @@ object SiteIntake {
         // 3. Hosting / ASN from ip-api (keyless).
         var asn: String? = null
         var hosting: String? = null
+        var hostingLocation: String? = null
         if (ip != null) {
             val info = runCatching {
                 Http.get("http://ip-api.com/json/$ip?fields=status,message,query,isp,org,as,city,country", timeoutMillis = 8_000)
                     ?.body?.let { IpExposure.parseInfo(it) }
             }.getOrNull()
             asn = info?.asn
+            hostingLocation = info?.location
             hosting = WebInfer.hostingProvider(listOfNotNull(info?.asn, info?.org, info?.isp).joinToString(" "), headerMap["server"])
         }
 
@@ -130,6 +134,43 @@ object SiteIntake {
             SiteLink("Google Maps (search)", "https://www.google.com/maps/search/${enc(q)}"),
             SiteLink("Yelp (search)", "https://www.yelp.com/search?find_desc=${enc(q)}"),
         )
+
+        // 10. Scores + flags + extras (page signals, AI-crawler access, perf, DNS security).
+        val now = System.currentTimeMillis()
+        val currentYear = java.util.GregorianCalendar().get(java.util.Calendar.YEAR)
+        val signals = SiteSignatures.pageSignals(html, canonicalUrl)
+        val robotsBody = robots?.body.orEmpty()
+        val blockedAi = SiteScore.blockedAiCrawlers(robotsBody)
+        val starBlocksAll = SiteScore.starBlocksAll(robotsBody)
+        val llmsTxt = runCatching { fetch("${canonicalUrl}llms.txt")?.let { it.code in 200..299 && it.body.isNotBlank() } }.getOrNull() ?: false
+        val hasSitemap = firstSitemap != null && firstSitemap.code in 200..299
+        val hasAnalytics = tech.integrations.any { it.category == "Analytics" }
+        val caa = recs("CAA").isNotEmpty()
+        val dnssec = runCatching {
+            Http.get("https://dns.google/resolve?name=$apex&type=DNSKEY", timeoutMillis = 6_000)?.body
+                ?.let { Regex("\"type\"\\s*:\\s*48").containsMatchIn(it) }
+        }.getOrNull() ?: false
+        val sslWeak = cert?.sigAlg?.uppercase()?.let { it.contains("SHA1") || it.contains("MD5") } ?: false
+        val sslGrade = when {
+            cert == null -> null
+            cert.validTo != null && cert.validTo < now -> "Expired"
+            sslWeak -> "Weak (SHA-1)"
+            cert.issuer != null -> "OK"
+            else -> null
+        }
+        val mixedContent = scheme == "https" && Regex("""(src|href)\s*=\s*["']http://""", RegexOption.IGNORE_CASE).containsMatchIn(html)
+        val domainExpiryDays = who?.expiry?.let { s ->
+            Regex("""(\d{4})-(\d{2})-(\d{2})""").find(s)?.let { m ->
+                runCatching {
+                    val cal = java.util.GregorianCalendar(m.groupValues[1].toInt(), m.groupValues[2].toInt() - 1, m.groupValues[3].toInt())
+                    ((cal.timeInMillis - now) / 86_400_000L).toInt()
+                }.getOrNull()
+            }
+        }
+        val seo = SiteScore.seo(signals, meta.title, meta.description, meta.canonical, meta.viewport, httpsRedirect, meta.schemaTypes, meta.favicon, robotsFound, hasSitemap, hasAnalytics)
+        val aiScore = SiteScore.ai(signals, blockedAi, starBlocksAll, llmsTxt, meta.schemaTypes, meta.title, meta.description, hasSitemap)
+        val flags = SiteScore.attentionFlags(httpsRedirect, cert?.validTo, sslWeak, domainExpiryDays, blockedAi, starBlocksAll,
+            meta.title, meta.description, signals.h1Count, signals.noindex, dmarc, meta.schemaTypes, mixedContent, meta.copyrightYear, currentYear, now)
 
         val cmsLabel = tech.cms ?: meta.generator?.substringBefore(' ')?.takeIf { it.isNotBlank() }
         val profile = SiteProfile(
@@ -186,7 +227,24 @@ object SiteIntake {
             pageCount = pageCount,
             copyrightYear = meta.copyrightYear,
             presenceSearches = presence,
-            generatedAt = System.currentTimeMillis(),
+            seoScore = seo.score, seoGrade = seo.grade, seoChecks = seo.checks,
+            aiScore = aiScore.score, aiGrade = aiScore.grade, aiChecks = aiScore.checks,
+            attentionFlags = flags,
+            aiCrawlersBlocked = blockedAi,
+            llmsTxt = llmsTxt,
+            keyPages = signals.keyPages,
+            contactEmails = signals.emails,
+            contactPhones = signals.phones,
+            responseMs = responseMs,
+            htmlBytes = html.length.takeIf { it > 0 },
+            scriptCount = signals.scriptCount,
+            stylesheetCount = signals.stylesheetCount,
+            scriptsInHead = signals.scriptsInHead,
+            hostingLocation = hostingLocation,
+            dnssec = dnssec,
+            caa = caa,
+            sslGrade = sslGrade,
+            generatedAt = now,
             notes = notes,
         )
         if (allDns.isEmpty() && html.isBlank())

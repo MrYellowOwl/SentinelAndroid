@@ -1,0 +1,76 @@
+package com.yellowowl.sentinel
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class WebScoreTest {
+    private val html = """
+      <html lang="en"><head>
+      <title>Acme Plumbing and Heating Services</title>
+      <meta name="description" content="Acme Plumbing offers 24/7 emergency plumbing and heating repair across Springfield with licensed techs.">
+      <meta property="og:title" content="Acme">
+      <link rel="canonical" href="https://www.acme.com/">
+      <link rel="icon" href="/favicon.ico">
+      <link rel="stylesheet" href="/style.css">
+      <script src="/app.js"></script>
+      <script type="application/ld+json">{"@type":"LocalBusiness","name":"Acme"}</script>
+      </head><body>
+      <h1>Welcome to Acme Plumbing</h1>
+      <img src="a.jpg" alt="plumber at work"><img src="b.jpg">
+      <p>${"word ".repeat(400)}</p>
+      <a href="/privacy-policy">Privacy</a><a href="/contact-us">Contact</a>
+      <a href="mailto:info@acme.com">Email</a><a href="tel:+15551234567">Call</a>
+      </body></html>
+    """
+
+    @Test fun pageSignalsExtractStructure() {
+        val s = SiteSignatures.pageSignals(html, "https://www.acme.com/")
+        assertEquals(1, s.h1Count)
+        assertEquals(2, s.imgCount); assertEquals(1, s.imgWithAlt)
+        assertEquals("en", s.htmlLang)
+        assertFalse(s.noindex); assertTrue(s.hasOpenGraph)
+        assertTrue(s.wordCount >= 300)
+        assertTrue(s.keyPages.any { it.label == "Privacy policy" })
+        assertTrue(s.emails.contains("info@acme.com"))
+        assertTrue(s.phones.any { it.contains("5551234567") })
+    }
+
+    @Test fun seoScoreGradesAStrongPage() {
+        val s = SiteSignatures.pageSignals(html, "https://www.acme.com/")
+        val seo = SiteScore.seo(s, "Acme Plumbing and Heating Services",
+            "Acme Plumbing offers 24/7 emergency plumbing and heating repair across Springfield with licensed techs.",
+            "https://www.acme.com/", "width=device-width", true, listOf("LocalBusiness"), "/favicon.ico", true, true, true)
+        assertTrue("seo=${seo.score}", seo.score >= 80)
+        assertTrue(seo.grade in listOf("A", "B"))
+    }
+
+    @Test fun robotsAiCrawlerAnalysis() {
+        val robots = "User-agent: GPTBot\nDisallow: /\n\nUser-agent: *\nDisallow: /wp-admin/\nAllow: /\n"
+        assertEquals(listOf("GPTBot"), SiteScore.blockedAiCrawlers(robots))
+        assertFalse(SiteScore.starBlocksAll(robots))
+        assertTrue(SiteScore.starBlocksAll("User-agent: *\nDisallow: /"))
+    }
+
+    @Test fun aiScorePenalizesBlockedCrawlers() {
+        val s = SiteSignatures.pageSignals(html, null)
+        val ai = SiteScore.ai(s, listOf("GPTBot"), false, false, listOf("LocalBusiness"), "Acme", "desc", true)
+        assertFalse(ai.checks.first { it.label.startsWith("Allows AI") }.passed)
+        assertTrue(ai.score in 1..99)
+    }
+
+    @Test fun attentionFlagsFire() {
+        val flags = SiteScore.attentionFlags(
+            httpsEnforced = false, certValidTo = System.currentTimeMillis() + 10L * 86_400_000, sslWeak = false,
+            domainExpiryDays = 20, blockedAi = listOf("GPTBot"), starBlocksAll = false,
+            title = null, description = null, h1Count = 0, noindex = false, dmarc = false,
+            schemaTypes = emptyList(), mixedContent = false, copyrightYear = "2018", currentYear = 2026, now = System.currentTimeMillis()
+        )
+        assertTrue(flags.any { it.contains("HTTPS") })
+        assertTrue(flags.any { it.contains("expires in") })
+        assertTrue(flags.any { it.contains("GPTBot") })
+        assertTrue(flags.any { it.contains("DMARC") })
+        assertTrue(flags.any { it.contains("2018") })
+    }
+}

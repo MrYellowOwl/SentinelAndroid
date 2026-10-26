@@ -815,18 +815,47 @@ private fun SiteProfileReport(
     onOpenUrl: (String) -> Unit,
     onCopy: (String) -> Unit
 ) {
+    // Scores.
+    if (p.seoScore != null || p.aiScore != null) {
+        SurfaceCard {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Eyebrow("SCORES · ${p.domain}")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    p.seoScore?.let { ScorePill("SEO", it, p.seoGrade, Modifier.weight(1f)) }
+                    p.aiScore?.let { ScorePill("AI Visibility", it, p.aiGrade, Modifier.weight(1f)) }
+                }
+                if (p.seoChecks.isNotEmpty()) ScoreChecklist("SEO checks", p.seoChecks)
+                if (p.aiChecks.isNotEmpty()) ScoreChecklist("AI visibility checks", p.aiChecks)
+                if (p.aiCrawlersBlocked.isNotEmpty()) Text("Blocks AI crawlers: ${p.aiCrawlersBlocked.joinToString(", ")}", color = HighColor, fontSize = 12.sp, lineHeight = 16.sp)
+            }
+        }
+    }
+
+    // Attention flags.
+    if (p.attentionFlags.isNotEmpty()) {
+        SurfaceCard {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.WarningAmber, null, tint = HighColor, modifier = Modifier.size(18.dp))
+                    Text("NEEDS ATTENTION · ${p.attentionFlags.size}", color = HighColor, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                }
+                p.attentionFlags.forEach { Text("• $it", color = TextMain, fontSize = 13.sp, lineHeight = 18.sp) }
+            }
+        }
+    }
+
     // Export row.
     SurfaceCard {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Eyebrow("INTAKE REPORT · ${p.domain}")
-            Text("Export the full report, or copy individual values below.", color = TextMuted, fontSize = 12.sp)
+            Eyebrow("EXPORT")
+            Text("Share the full report, or tap any value below to copy it.", color = TextMuted, fontSize = 12.sp)
+            Button(onClick = { onShareSite(ReportExporter.Format.HTML) }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
+                Icon(Icons.Filled.Share, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Share report", fontWeight = FontWeight.Bold, maxLines = 1)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = { onShareSite(ReportExporter.Format.HTML) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = OnAccent)) {
-                    Icon(Icons.Filled.Share, null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Share", fontWeight = FontWeight.Bold)
-                }
-                OutlinedButton(onClick = onPrintSite, border = BorderStroke(1.dp, Border)) { Text("PDF", color = Accent) }
-                OutlinedButton(onClick = { onShareSite(ReportExporter.Format.CSV) }, border = BorderStroke(1.dp, Border)) { Text("CSV", color = Accent) }
-                OutlinedButton(onClick = { onShareSite(ReportExporter.Format.JSON) }, border = BorderStroke(1.dp, Border)) { Text("JSON", color = Accent) }
+                OutlinedButton(onClick = onPrintSite, border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) { Text("PDF", color = Accent, maxLines = 1) }
+                OutlinedButton(onClick = { onShareSite(ReportExporter.Format.CSV) }, border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) { Text("CSV", color = Accent, maxLines = 1) }
+                OutlinedButton(onClick = { onShareSite(ReportExporter.Format.JSON) }, border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) { Text("JSON", color = Accent, maxLines = 1) }
             }
         }
     }
@@ -842,8 +871,8 @@ private fun SiteProfileReport(
         "HTTP status" to p.statusCode?.toString(),
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("HOSTING & NETWORK", listOf(
-        "IP" to p.ip, "Hosting" to p.hostingProvider, "ASN / org" to p.asn, "CDN" to p.cdn,
-        "Server" to p.serverHeader, "X-Powered-By" to p.poweredBy,
+        "IP" to p.ip, "Hosting" to p.hostingProvider, "Location" to p.hostingLocation,
+        "ASN / org" to p.asn, "CDN" to p.cdn, "Server" to p.serverHeader, "X-Powered-By" to p.poweredBy,
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("DOMAIN & REGISTRAR", listOf(
         "Registrar" to p.registrar, "Created" to p.domainCreated, "Updated" to p.domainUpdated, "Expires" to p.domainExpiry,
@@ -857,6 +886,19 @@ private fun SiteProfileReport(
     WebInfoCard("EMAIL", listOf(
         "Provider" to p.emailProvider, "SPF" to (if (p.spf) "Yes" else "No"),
         "DMARC" to (if (p.dmarc) "Yes" else "No"), "DKIM" to (if (p.dkimHint) "Detected" else "Not detected"),
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("DNS SECURITY", listOf(
+        "DNSSEC" to (if (p.dnssec) "Enabled" else "Not enabled"),
+        "CAA record" to (if (p.caa) "Present" else "None"),
+        "SSL grade" to p.sslGrade,
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("PERFORMANCE", listOf(
+        "Response time" to p.responseMs?.let { "$it ms" },
+        "HTML size" to p.htmlBytes?.let { "${it / 1024} KB" },
+        "Scripts" to p.scriptCount?.toString(),
+        "Stylesheets" to p.stylesheetCount?.toString(),
+        "Render-blocking (head scripts)" to p.scriptsInHead?.toString(),
+        "CDN" to p.cdn,
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("PLATFORM & STACK", listOf(
         "CMS / platform" to p.cms, "Admin login" to p.cmsAdminPath, "Framework" to p.framework,
@@ -877,6 +919,8 @@ private fun SiteProfileReport(
         "Pages (sitemap)" to p.pageCount?.toString(),
         "Sitemaps" to p.sitemapUrls.joinToString("\n").ifBlank { null },
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("CONTACTS ON PAGE", (p.contactEmails.map { "Email" to it } + p.contactPhones.map { "Phone" to it }), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("KEY PAGES", emptyList(), linkRows = p.keyPages, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("SOCIAL", emptyList(), linkRows = p.socialLinks, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("ONLINE PRESENCE (SEARCH)", emptyList(), linkRows = p.presenceSearches, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("DNS RECORDS", p.dns.map { it.type to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
@@ -914,6 +958,39 @@ private fun WebInfoCard(
                     Text(link.label, color = TextMuted, fontSize = 13.sp, modifier = Modifier.width(120.dp))
                     Text(link.url, color = Accent, fontSize = 13.sp, lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScorePill(label: String, score: Int, grade: String?, modifier: Modifier = Modifier) {
+    val color = when { score >= 80 -> Accent; score >= 55 -> MediumColor; else -> HighColor }
+    Column(
+        modifier.background(SurfaceRaised, RoundedCornerShape(12.dp)).padding(vertical = 12.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Text("$score", color = color, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+        grade?.let { Text("Grade $it", color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) }
+        Text(label, color = TextMuted, fontSize = 11.sp, maxLines = 1)
+    }
+}
+
+@Composable
+private fun ScoreChecklist(title: String, checks: List<ScoreCheck>) {
+    var expanded by remember { mutableStateOf(false) }
+    Column {
+        Row(
+            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("$title · ${checks.count { it.passed }}/${checks.size}", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+        }
+        if (expanded) checks.forEach { c ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 1.dp)) {
+                Icon(if (c.passed) Icons.Filled.CheckCircle else Icons.Filled.WarningAmber, contentDescription = null, tint = if (c.passed) Accent else TextMuted, modifier = Modifier.size(14.dp))
+                Text(c.label, color = if (c.passed) TextMain else TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
             }
         }
     }

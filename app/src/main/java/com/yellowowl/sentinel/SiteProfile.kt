@@ -13,6 +13,7 @@ data class SiteDnsRecord(val type: String, val value: String)
 data class SiteTech(val name: String, val category: String)   // "Google Analytics 4" / "Analytics"
 data class SiteLink(val label: String, val url: String)
 data class SiteId(val kind: String, val value: String)        // "GA4", "G-XXXX"
+data class ScoreCheck(val label: String, val passed: Boolean)
 
 data class SiteProfile(
     val input: String,
@@ -90,6 +91,37 @@ data class SiteProfile(
 
     // Presence (search links — detection of actual profiles needs APIs we don't require)
     val presenceSearches: List<SiteLink> = emptyList(),
+
+    // Scores
+    val seoScore: Int? = null,
+    val seoGrade: String? = null,
+    val seoChecks: List<ScoreCheck> = emptyList(),
+    val aiScore: Int? = null,
+    val aiGrade: String? = null,
+    val aiChecks: List<ScoreCheck> = emptyList(),
+    val attentionFlags: List<String> = emptyList(),
+
+    // AI crawlers / structure signals
+    val aiCrawlersBlocked: List<String> = emptyList(),
+    val llmsTxt: Boolean = false,
+
+    // Key pages & contacts
+    val keyPages: List<SiteLink> = emptyList(),
+    val contactEmails: List<String> = emptyList(),
+    val contactPhones: List<String> = emptyList(),
+
+    // Performance snapshot
+    val responseMs: Long? = null,
+    val htmlBytes: Int? = null,
+    val scriptCount: Int? = null,
+    val stylesheetCount: Int? = null,
+    val scriptsInHead: Int? = null,
+
+    // Hosting location & DNS security
+    val hostingLocation: String? = null,
+    val dnssec: Boolean = false,
+    val caa: Boolean = false,
+    val sslGrade: String? = null,
 
     val generatedAt: Long = 0L,
     val notes: List<String> = emptyList(),   // per-source caveats / failures
