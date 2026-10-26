@@ -24,6 +24,18 @@ data class DeviceIdentity(
     val isEmpty: Boolean get() = name == null && vendor == null && model == null && kind == null && mac == null
 }
 
+/**
+ * Scrubs a discovered name/label. Drops the Unicode replacement char (the "◆?" glyph shown when bytes
+ * were decoded with the wrong charset — e.g. a NetBIOS name padded with NUL or non-ASCII bytes and read
+ * as US-ASCII) and any other control characters, then trims. Returns null when nothing printable remains,
+ * so a garbage name falls back to the IP instead of showing mojibake.
+ */
+internal fun cleanDeviceName(raw: String?): String? {
+    if (raw == null) return null
+    val cleaned = raw.replace('�', ' ').filter { !it.isISOControl() }.trim()
+    return cleaned.ifBlank { null }
+}
+
 // ---------------------------------------------------------------- SSDP / UPnP (text over UDP 1900)
 
 object Ssdp {
@@ -80,9 +92,9 @@ object Ssdp {
             else -> modelName
         }?.take(60)
         return DeviceIdentity(
-            name = friendly,
-            vendor = manufacturer,
-            model = model,
+            name = cleanDeviceName(friendly),
+            vendor = cleanDeviceName(manufacturer),
+            model = cleanDeviceName(model),
             kind = classify("$deviceType $friendly")
         )
     }
@@ -144,11 +156,11 @@ object NetBios {
         var workstation: String? = null
         repeat(count) {
             if (p + 18 > data.size) return@repeat
-            val raw = String(data, p, 15, Charsets.US_ASCII).trim()
+            val raw = cleanDeviceName(String(data, p, 15, Charsets.US_ASCII))
             val suffix = data[p + 15].toInt() and 0xFF
             val flags = ((data[p + 16].toInt() and 0xFF) shl 8) or (data[p + 17].toInt() and 0xFF)
             val isGroup = (flags and 0x8000) != 0
-            if (suffix == 0x00 && !isGroup && workstation == null && raw.isNotBlank()) workstation = raw
+            if (suffix == 0x00 && !isGroup && workstation == null && raw != null) workstation = raw
             p += 18
         }
         return workstation?.let { DeviceIdentity(name = it, kind = "Windows/SMB") }
@@ -302,9 +314,9 @@ object MdnsDns {
             ?.substringAfter('=')?.trim()
         val services = message.answers.filter { it.type == TYPE_PTR }.mapNotNull { it.name }
         return DeviceIdentity(
-            name = names.firstOrNull { it.isNotBlank() },
-            vendor = vendor,
-            model = model,
+            name = cleanDeviceName(names.firstOrNull { it.isNotBlank() }),
+            vendor = cleanDeviceName(vendor),
+            model = cleanDeviceName(model),
             kind = classifyServices(services)
         )
     }

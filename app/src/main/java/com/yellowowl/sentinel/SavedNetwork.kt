@@ -189,9 +189,10 @@ object NetworkCodec {
                     SavedDevice(
                         mac = d.optString("mac").ifBlank { null },
                         ip = ip,
-                        name = d.optString("name").ifBlank { null },
-                        vendor = d.optString("vendor").ifBlank { null },
-                        model = d.optString("model").ifBlank { null },
+                        // cleanDeviceName heals any mojibake (◆?) written by an older build.
+                        name = cleanDeviceName(d.optString("name")),
+                        vendor = cleanDeviceName(d.optString("vendor")),
+                        model = cleanDeviceName(d.optString("model")),
                         kind = d.optString("kind").ifBlank { null },
                         openPorts = ports,
                         firstSeen = d.optLong("firstSeen"),

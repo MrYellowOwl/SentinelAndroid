@@ -237,7 +237,7 @@ object NetworkScanner {
 
     /** Trim trailing dot and a noisy local-domain suffix so "nas.lan." shows as "nas". */
     private fun cleanName(raw: String): String {
-        val n = raw.trim().trimEnd('.')
+        val n = (cleanDeviceName(raw) ?: raw).trimEnd('.')
         val suffix = listOf(".lan", ".home", ".local", ".localdomain", ".home.arpa").firstOrNull { n.endsWith(it, ignoreCase = true) }
         return (if (suffix != null) n.dropLast(suffix.length) else n).ifBlank { n }
     }

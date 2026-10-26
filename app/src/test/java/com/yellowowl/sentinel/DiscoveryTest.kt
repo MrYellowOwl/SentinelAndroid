@@ -88,6 +88,36 @@ class DiscoveryTest {
     }
 
     @Test
+    fun cleanDeviceNameStripsReplacementAndControlChars() {
+        assertEquals("LAPTOP", cleanDeviceName("LAPTOP\u0000\u0000"))      // NUL padding
+        assertEquals("LAPTOP", cleanDeviceName("LAPTOP��"))      // replacement glyphs
+        assertEquals("LAP TOP", cleanDeviceName("LAP�TOP"))           // embedded → space
+        assertNull(cleanDeviceName("���"))                  // all garbage → null
+        assertNull(cleanDeviceName(""))
+        assertNull(cleanDeviceName(null))
+        assertEquals("café-tv", cleanDeviceName("café-tv"))               // keep legit Unicode
+    }
+
+    @Test
+    fun netbiosScrubsNonAsciiPaddedName() {
+        val header = bytes(0x41, 0x52, 0x84, 0x00, 0, 1, 0, 1, 0, 0, 0, 0)
+        val qname = ByteArray(34).also { it[0] = 0x20 }
+        val question = qname + bytes(0x00, 0x21, 0x00, 0x01)
+        // Name "PC-1" followed by NUL padding (not spaces) + a stray high byte — would show as ◆? raw.
+        fun badEntry(): ByteArray {
+            val name = ByteArray(15)
+            "PC-1".toByteArray(Charsets.US_ASCII).copyInto(name)
+            name[5] = 0xE9.toByte()   // stray non-ASCII byte in the padding region
+            return name + bytes(0x00, 0x04, 0x00)   // suffix 0x00 (workstation), flags
+        }
+        val answerHeader = bytes(0xC0, 0x0C, 0x00, 0x21, 0x00, 0x01, 0, 0, 0, 0, 0, 0)
+        val packet = header + question + answerHeader + (bytes(1) + badEntry())
+        val id = NetBios.parseNodeStatus(packet)!!
+        assertEquals("PC-1", id.name)       // scrubbed, not mojibake
+        assertEquals("Windows/SMB", id.kind)
+    }
+
+    @Test
     fun netbiosParsesUniqueMachineName() {
         val header = bytes(0x41, 0x52, 0x84, 0x00, 0, 1, 0, 1, 0, 0, 0, 0)
         val qname = ByteArray(34).also { it[0] = 0x20 } // len + 32 encoded + trailing null already zero
