@@ -1070,6 +1070,9 @@ internal fun HostDetailScreen(
     rescanning: Boolean,
     nickname: String?,
     onSetNickname: (String) -> Unit,
+    saved: SavedDevice? = null,
+    shodanKey: String = "",
+    vtKey: String = "",
     onBack: () -> Unit,
     onRescan: () -> Unit,
     onStatus: (Finding, FindingStatus) -> Unit,
@@ -1094,7 +1097,7 @@ internal fun HostDetailScreen(
                 }
                 val shownName = nickname?.takeIf { it.isNotBlank() } ?: device.displayName
                 Text(shownName, color = TextMain, fontSize = 24.sp, fontWeight = FontWeight.Bold, lineHeight = 28.sp)
-                val sub = listOfNotNull(device.ipAddress.takeIf { it != shownName }, device.vendor, device.kind, device.mac)
+                val sub = listOfNotNull(device.ipAddress.takeIf { it != shownName }, device.vendor, device.model, device.kind)
                 if (sub.isNotEmpty()) Text(sub.joinToString(" · "), color = TextMuted, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = { onCopy(device.ipAddress) }, border = BorderStroke(1.dp, Border)) {
@@ -1116,15 +1119,50 @@ internal fun HostDetailScreen(
                 }
             }
         }
+        item {
+            SurfaceCard {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Eyebrow("OVERVIEW")
+                    Spacer(Modifier.height(4.dp))
+                    DetailRow("IP address", device.ipAddress)
+                    val mac = device.mac
+                    if (mac != null) {
+                        DetailRow("MAC", mac + if (Oui.isLocallyAdministered(mac)) "  (randomized)" else "")
+                    } else {
+                        DetailRow("MAC", "Not recovered (Android hides it unless the router shares it)", valueColor = TextMuted)
+                    }
+                    device.vendor?.takeIf { it.isNotBlank() }?.let { DetailRow("Manufacturer", it) }
+                    device.model?.takeIf { it.isNotBlank() }?.let { DetailRow("Model", it) }
+                    device.kind?.takeIf { it.isNotBlank() }?.let { DetailRow("Type", it) }
+                    device.identity?.name?.takeIf { it.isNotBlank() && it != device.displayName }?.let { DetailRow("Hostname", it) }
+                    val role = listOfNotNull(
+                        if (device.isGateway) "Gateway / router" else null,
+                        if (device.isThisDevice) "This phone" else null
+                    ).joinToString(" · ")
+                    if (role.isNotEmpty()) DetailRow("Role", role, valueColor = Accent)
+                    saved?.let { s ->
+                        if (s.firstSeen > 0) DetailRow("First seen", DateUtils.getRelativeTimeSpanString(s.firstSeen).toString())
+                        if (s.lastSeen > 0) DetailRow("Last seen", if (device.isThisDevice || s.online) "Now (online)" else DateUtils.getRelativeTimeSpanString(s.lastSeen).toString())
+                    }
+                }
+            }
+        }
         if (device.openPorts.isNotEmpty()) {
             item {
                 SurfaceCard {
-                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Eyebrow("OPEN PORTS · ${device.openPorts.size}")
                         device.openPorts.forEach { port ->
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("${port.port}  ${port.service}", color = TextMain, fontSize = 13.sp)
-                                port.fingerprint?.let { Text(it.display, color = Accent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            val risk = PortCatalog.riskFor(port.port)
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                                        risk?.severity?.let { Box(Modifier.size(8.dp).background(it.color(), CircleShape)) }
+                                        Text("${port.port}  ${port.service}", color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    port.fingerprint?.let { Text(it.display, color = Accent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                                }
+                                risk?.why?.let { Text(it, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp) }
                             }
                         }
                     }
@@ -1151,6 +1189,9 @@ internal fun HostDetailScreen(
                 }
             }
         }
+        if (device.isGateway) {
+            item { InternetExposureCard(shodanKey = shodanKey, vtKey = vtKey, onCopy = onCopy, onOpenUrl = onOpenUrl) }
+        }
         item { Eyebrow("ISSUES · $openCount open / ${ordered.size} total") }
         if (ordered.isEmpty()) {
             item {
@@ -1172,6 +1213,93 @@ internal fun HostDetailScreen(
                     onCopy = onCopy
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String, valueColor: Color = TextMain) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, color = TextMuted, fontSize = 13.sp, modifier = Modifier.width(104.dp))
+        Text(value, color = valueColor, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * Shown on the gateway: the network's internet-facing edge. Keyless, it reports the public IP, ISP/ASN
+ * and which inbound ports answer from outside; with a Shodan/VirusTotal key it adds third-party intel on
+ * that public IP. LAN hosts share one public IP behind NAT, so this edge view lives on the router.
+ */
+@Composable
+private fun InternetExposureCard(shodanKey: String, vtKey: String, onCopy: (String) -> Unit, onOpenUrl: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var ran by remember { mutableStateOf(false) }
+    var exposure by remember { mutableStateOf<NetToolsNet.ExposureResult?>(null) }
+    var intel by remember { mutableStateOf<List<Finding>>(emptyList()) }
+    var err by remember { mutableStateOf<String?>(null) }
+    val hasKeys = shodanKey.isNotBlank() || vtKey.isNotBlank()
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Eyebrow("INTERNET EXPOSURE")
+            Text(
+                "What the outside world can see at this network's public edge. Your LAN devices aren't reachable from the internet unless a port answers here.",
+                color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp
+            )
+            if (!ran) {
+                RunButton(if (busy) "Checking…" else "Check internet exposure", !busy) {
+                    busy = true; err = null; ran = true
+                    scope.launch {
+                        NetToolsNet.publicExposure().onSuccess { r ->
+                            exposure = r
+                            if (hasKeys && r.info.kind == IpExposure.IpKind.PUBLIC) {
+                                NetToolsNet.externalIntel(r.info.ip, shodanKey, vtKey).onSuccess { intel = it }
+                            }
+                        }.onFailure { err = it.message ?: "Couldn't check exposure." }
+                        busy = false
+                    }
+                }
+                if (!hasKeys) Text(
+                    "Add a Shodan or VirusTotal key in Settings for deeper intel on the public IP.",
+                    color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp
+                )
+            }
+            if (busy) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Accent)
+                Text("Looking up the public IP…", color = TextMuted, fontSize = 13.sp)
+            }
+            exposure?.let { r ->
+                val info = r.info
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(info.ip, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    Tag(info.kind.label)
+                }
+                listOfNotNull(info.isp, info.asn, info.location).takeIf { it.isNotEmpty() }?.let {
+                    Text(it.joinToString(" · "), color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                }
+                if (info.kind == IpExposure.IpKind.PUBLIC) {
+                    if (r.reachable.isEmpty()) Text("No common inbound ports answered from outside — good.", color = Accent, fontSize = 13.sp)
+                    else Text("Reachable inbound: ${r.reachable.joinToString(", ")}", color = HighColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+                TextButton(onClick = { onCopy(info.ip) }, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = Accent, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp)); Text("Copy public IP", color = Accent, fontSize = 13.sp)
+                }
+            }
+            if (intel.isNotEmpty()) {
+                HorizontalDivider(color = Border)
+                Text("THIRD-PARTY INTEL", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                intel.forEach { f ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            SeverityBadge(f.severity)
+                            Text(f.title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        if (f.details.isNotBlank()) Text(f.details, color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                    }
+                }
+            }
+            err?.let { Text(it, color = HighColor, fontSize = 13.sp) }
         }
     }
 }

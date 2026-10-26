@@ -250,6 +250,12 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
         }
         val detailDevice = hostDetailIp?.let { ip -> network.devices.firstOrNull { it.ipAddress == ip } }
         if (hostDetailIp != null && detailDevice != null) {
+            val detailSaved = run {
+                val mac = detailDevice.mac?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+                savedNetworks.flatMap { it.devices }.firstOrNull { sd ->
+                    (mac != null && sd.mac?.trim()?.lowercase() == mac) || sd.ip == detailDevice.ipAddress
+                }
+            }
             HostDetailScreen(
                 modifier = modifier,
                 device = detailDevice,
@@ -258,6 +264,9 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 rescanning = network.rescanningIp == detailDevice.ipAddress,
                 nickname = nicknames[Nicknames.keyFor(detailDevice)],
                 onSetNickname = { vm.setNickname(detailDevice, it) },
+                saved = detailSaved,
+                shodanKey = shodanKey,
+                vtKey = vtKey,
                 onBack = { hostDetailIp = null },
                 onRescan = { vm.rescanHost(detailDevice.ipAddress) },
                 onStatus = vm::setFindingStatus,
