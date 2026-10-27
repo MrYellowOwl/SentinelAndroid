@@ -267,11 +267,14 @@ object SiteSignatures {
 
     data class PageSignals(
         val h1Count: Int,
+        val h2Count: Int,
         val imgCount: Int,
         val imgWithAlt: Int,
         val htmlLang: String?,
         val noindex: Boolean,
         val hasOpenGraph: Boolean,
+        val hasSameAs: Boolean,
+        val hasAuthor: Boolean,
         val wordCount: Int,
         val scriptCount: Int,
         val stylesheetCount: Int,
@@ -294,6 +297,10 @@ object SiteSignatures {
     fun pageSignals(html: String, baseUrl: String?): PageSignals {
         val lower = html.lowercase()
         val h1 = Regex("<h1[\\s>]", RegexOption.IGNORE_CASE).findAll(html).count()
+        val h2 = Regex("<h2[\\s>]", RegexOption.IGNORE_CASE).findAll(html).count()
+        val hasSameAs = lower.contains("\"sameas\"") || lower.contains("'sameas'")
+        val hasAuthor = Regex("""["']author["']\s*:""", RegexOption.IGNORE_CASE).containsMatchIn(html) ||
+            Regex("""<meta[^>]*\bname\s*=\s*["']author["']""", RegexOption.IGNORE_CASE).containsMatchIn(html)
         val imgs = Regex("<img\\b[^>]*>", RegexOption.IGNORE_CASE).findAll(html).map { it.value }.toList()
         val imgWithAlt = imgs.count { Regex("""\balt\s*=\s*["'][^"']+["']""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
         val htmlLang = Regex("""<html[^>]*\blang\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)?.groupValues?.get(1)?.trim()
@@ -328,6 +335,6 @@ object SiteSignatures {
         val phones = Regex("""tel:([+0-9().\-\s]{7,})""", RegexOption.IGNORE_CASE).findAll(html)
             .map { it.groupValues[1].trim() }.distinct().take(10).toList()
 
-        return PageSignals(h1, imgs.size, imgWithAlt, htmlLang, noindex, hasOg, wordCount, scriptCount, stylesheetCount, scriptsInHead, keyPages.values.toList(), emails.toList(), phones)
+        return PageSignals(h1, h2, imgs.size, imgWithAlt, htmlLang, noindex, hasOg, hasSameAs, hasAuthor, wordCount, scriptCount, stylesheetCount, scriptsInHead, keyPages.values.toList(), emails.toList(), phones)
     }
 }

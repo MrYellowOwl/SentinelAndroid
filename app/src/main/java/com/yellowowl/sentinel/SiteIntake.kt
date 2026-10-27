@@ -167,10 +167,15 @@ object SiteIntake {
                 }.getOrNull()
             }
         }
-        val seo = SiteScore.seo(signals, meta.title, meta.description, meta.canonical, meta.viewport, httpsRedirect, meta.schemaTypes, meta.favicon, robotsFound, hasSitemap, hasAnalytics)
-        val aiScore = SiteScore.ai(signals, blockedAi, starBlocksAll, llmsTxt, meta.schemaTypes, meta.title, meta.description, hasSitemap)
-        val flags = SiteScore.attentionFlags(httpsRedirect, cert?.validTo, sslWeak, domainExpiryDays, blockedAi, starBlocksAll,
-            meta.title, meta.description, signals.h1Count, signals.noindex, dmarc, meta.schemaTypes, mixedContent, meta.copyrightYear, currentYear, now)
+        val hsts = !headerMap["strict-transport-security"].isNullOrBlank()
+        val compression = headerMap["content-encoding"]?.lowercase()
+            ?.let { it.contains("gzip") || it.contains("br") || it.contains("deflate") || it.contains("zstd") } ?: false
+        val htmlBytes = html.length.takeIf { it > 0 }
+        val seo = SiteScore.seo(signals, meta.title, meta.description, meta.canonical, meta.viewport, httpsRedirect, hsts, compression,
+            meta.schemaTypes, meta.favicon, robotsFound, hasSitemap, hasAnalytics, responseMs, htmlBytes)
+        val aiScore = SiteScore.ai(signals, blockedAi, starBlocksAll, llmsTxt, meta.schemaTypes, meta.title, meta.description, meta.canonical, hasSitemap)
+        val flags = SiteScore.attentionFlags(httpsRedirect, hsts, compression, cert?.validTo, sslWeak, domainExpiryDays, blockedAi, starBlocksAll,
+            meta.title, meta.description, signals.h1Count, signals.noindex, dmarc, meta.schemaTypes, mixedContent, responseMs, meta.copyrightYear, currentYear, now)
 
         val cmsLabel = tech.cms ?: meta.generator?.substringBefore(' ')?.takeIf { it.isNotBlank() }
         val profile = SiteProfile(
@@ -227,8 +232,8 @@ object SiteIntake {
             pageCount = pageCount,
             copyrightYear = meta.copyrightYear,
             presenceSearches = presence,
-            seoScore = seo.score, seoGrade = seo.grade, seoChecks = seo.checks,
-            aiScore = aiScore.score, aiGrade = aiScore.grade, aiChecks = aiScore.checks,
+            seoScore = seo.score, seoGrade = seo.grade, seoChecks = seo.checks, seoCategories = seo.categories,
+            aiScore = aiScore.score, aiGrade = aiScore.grade, aiChecks = aiScore.checks, aiCategories = aiScore.categories,
             attentionFlags = flags,
             aiCrawlersBlocked = blockedAi,
             llmsTxt = llmsTxt,

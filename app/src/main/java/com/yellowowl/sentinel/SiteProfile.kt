@@ -13,7 +13,10 @@ data class SiteDnsRecord(val type: String, val value: String)
 data class SiteTech(val name: String, val category: String)   // "Google Analytics 4" / "Analytics"
 data class SiteLink(val label: String, val url: String)
 data class SiteId(val kind: String, val value: String)        // "GA4", "G-XXXX"
-data class ScoreCheck(val label: String, val passed: Boolean)
+enum class CheckStatus { PASS, WARN, FAIL }
+/** One weighted scoring criterion. WARN earns half credit. [category] groups it within a score. */
+data class ScoreCheck(val label: String, val category: String, val status: CheckStatus, val weight: Int)
+data class ScoreCategory(val name: String, val earned: Int, val possible: Int)
 
 data class SiteProfile(
     val input: String,
@@ -96,9 +99,11 @@ data class SiteProfile(
     val seoScore: Int? = null,
     val seoGrade: String? = null,
     val seoChecks: List<ScoreCheck> = emptyList(),
+    val seoCategories: List<ScoreCategory> = emptyList(),
     val aiScore: Int? = null,
     val aiGrade: String? = null,
     val aiChecks: List<ScoreCheck> = emptyList(),
+    val aiCategories: List<ScoreCategory> = emptyList(),
     val attentionFlags: List<String> = emptyList(),
 
     // AI crawlers / structure signals

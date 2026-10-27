@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -819,13 +820,13 @@ private fun SiteProfileReport(
     if (p.seoScore != null || p.aiScore != null) {
         SurfaceCard {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Eyebrow("SCORES · ${p.domain}")
+                Eyebrow("SCORECARD · ${p.domain}")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     p.seoScore?.let { ScorePill("SEO", it, p.seoGrade, Modifier.weight(1f)) }
                     p.aiScore?.let { ScorePill("AI Visibility", it, p.aiGrade, Modifier.weight(1f)) }
                 }
-                if (p.seoChecks.isNotEmpty()) ScoreChecklist("SEO checks", p.seoChecks)
-                if (p.aiChecks.isNotEmpty()) ScoreChecklist("AI visibility checks", p.aiChecks)
+                if (p.seoChecks.isNotEmpty()) ScoreBlock("SEO", p.seoCategories, p.seoChecks)
+                if (p.aiChecks.isNotEmpty()) ScoreBlock("AI Visibility", p.aiCategories, p.aiChecks)
                 if (p.aiCrawlersBlocked.isNotEmpty()) Text("Blocks AI crawlers: ${p.aiCrawlersBlocked.joinToString(", ")}", color = HighColor, fontSize = 12.sp, lineHeight = 16.sp)
             }
         }
@@ -862,6 +863,7 @@ private fun SiteProfileReport(
 
     val ms = { x: Long? -> x?.let { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(it)) } }
 
+    GroupLabel("SNAPSHOT")
     WebInfoCard("OVERVIEW", listOf(
         "Domain" to p.domain,
         "Canonical" to p.canonicalUrl,
@@ -874,6 +876,16 @@ private fun SiteProfileReport(
         "IP" to p.ip, "Hosting" to p.hostingProvider, "Location" to p.hostingLocation,
         "ASN / org" to p.asn, "CDN" to p.cdn, "Server" to p.serverHeader, "X-Powered-By" to p.poweredBy,
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("PERFORMANCE", listOf(
+        "Response time" to p.responseMs?.let { "$it ms" },
+        "HTML size" to p.htmlBytes?.let { "${it / 1024} KB" },
+        "Scripts" to p.scriptCount?.toString(),
+        "Stylesheets" to p.stylesheetCount?.toString(),
+        "Render-blocking (head scripts)" to p.scriptsInHead?.toString(),
+        "CDN" to p.cdn,
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+
+    GroupLabel("DOMAIN, DNS & SECURITY")
     WebInfoCard("DOMAIN & REGISTRAR", listOf(
         "Registrar" to p.registrar, "Created" to p.domainCreated, "Updated" to p.domainUpdated, "Expires" to p.domainExpiry,
         "DNS host" to p.dnsHost, "Name servers" to p.nameServers.joinToString(", ").ifBlank { null },
@@ -892,39 +904,48 @@ private fun SiteProfileReport(
         "CAA record" to (if (p.caa) "Present" else "None"),
         "SSL grade" to p.sslGrade,
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
-    WebInfoCard("PERFORMANCE", listOf(
-        "Response time" to p.responseMs?.let { "$it ms" },
-        "HTML size" to p.htmlBytes?.let { "${it / 1024} KB" },
-        "Scripts" to p.scriptCount?.toString(),
-        "Stylesheets" to p.stylesheetCount?.toString(),
-        "Render-blocking (head scripts)" to p.scriptsInHead?.toString(),
-        "CDN" to p.cdn,
+    WebInfoCard("EMAIL", listOf(
+        "Provider" to p.emailProvider, "SPF" to (if (p.spf) "Yes" else "No"),
+        "DMARC" to (if (p.dmarc) "Yes" else "No"), "DKIM" to (if (p.dkimHint) "Detected" else "Not detected"),
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+
+    GroupLabel("PLATFORM & STACK")
     WebInfoCard("PLATFORM & STACK", listOf(
         "CMS / platform" to p.cms, "Admin login" to p.cmsAdminPath, "Framework" to p.framework,
         "Page builder" to p.pageBuilder, "Fonts" to p.fonts.joinToString(", ").ifBlank { null },
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("THIRD-PARTY INTEGRATIONS", p.integrations.map { it.category to it.name }, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("IDS TO MIGRATE", p.analyticsIds.map { it.kind to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+
+    GroupLabel("CONTENT & SEO")
     WebInfoCard("SEO & META", listOf(
         "Title" to p.title, "Description" to p.description, "Canonical" to p.canonicalLink,
         "Viewport" to p.viewport, "Schema" to p.schemaTypes.joinToString(", ").ifBlank { null },
         "Copyright" to p.copyrightYear,
-    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
-    WebInfoCard("BUSINESS", listOf(
-        "Name" to p.businessName, "Phone" to p.businessPhone, "Address" to p.businessAddress,
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("STRUCTURE", listOf(
         "robots.txt" to (if (p.robotsFound) "Found" else "Not found"),
         "Pages (sitemap)" to p.pageCount?.toString(),
         "Sitemaps" to p.sitemapUrls.joinToString("\n").ifBlank { null },
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("BUSINESS", listOf(
+        "Name" to p.businessName, "Phone" to p.businessPhone, "Address" to p.businessAddress,
+    ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("CONTACTS ON PAGE", (p.contactEmails.map { "Email" to it } + p.contactPhones.map { "Phone" to it }), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("KEY PAGES", emptyList(), linkRows = p.keyPages, onCopy = onCopy, onOpenUrl = onOpenUrl)
+
+    GroupLabel("MARKETING & PRESENCE")
     WebInfoCard("SOCIAL", emptyList(), linkRows = p.socialLinks, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("ONLINE PRESENCE (SEARCH)", emptyList(), linkRows = p.presenceSearches, onCopy = onCopy, onOpenUrl = onOpenUrl)
+
+    GroupLabel("RAW DATA")
     WebInfoCard("DNS RECORDS", p.dns.map { it.type to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
     if (p.notes.isNotEmpty()) WebInfoCard("NOTES", p.notes.map { "⚠" to it }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+}
+
+@Composable
+private fun GroupLabel(text: String) {
+    Text(text, color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp, modifier = Modifier.padding(top = 8.dp, start = 2.dp))
 }
 
 @Composable
@@ -976,21 +997,33 @@ private fun ScorePill(label: String, score: Int, grade: String?, modifier: Modif
     }
 }
 
+private fun barColor(frac: Float): Color = when { frac >= 0.8f -> Accent; frac >= 0.6f -> MediumColor; else -> HighColor }
+
 @Composable
-private fun ScoreChecklist(title: String, checks: List<ScoreCheck>) {
+private fun ScoreBlock(title: String, categories: List<ScoreCategory>, checks: List<ScoreCheck>) {
     var expanded by remember { mutableStateOf(false) }
-    Column {
+    val passed = checks.count { it.status == CheckStatus.PASS }
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        categories.forEach { cat ->
+            val frac = if (cat.possible == 0) 0f else cat.earned.toFloat() / cat.possible
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${title.take(3)} · ${cat.name}", color = TextMuted, fontSize = 11.sp, modifier = Modifier.width(132.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                LinearProgressIndicator(progress = { frac }, modifier = Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp)), color = barColor(frac), trackColor = SurfaceRaised)
+                Text("${cat.earned}/${cat.possible}", color = TextMuted, fontSize = 11.sp)
+            }
+        }
         Row(
-            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 4.dp),
+            Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(top = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("$title · ${checks.count { it.passed }}/${checks.size}", color = TextMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp))
+            Text("$title checks · $passed/${checks.size} pass", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null, tint = Accent, modifier = Modifier.size(18.dp))
         }
         if (expanded) checks.forEach { c ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 1.dp)) {
-                Icon(if (c.passed) Icons.Filled.CheckCircle else Icons.Filled.WarningAmber, contentDescription = null, tint = if (c.passed) Accent else TextMuted, modifier = Modifier.size(14.dp))
-                Text(c.label, color = if (c.passed) TextMain else TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+            val color = when (c.status) { CheckStatus.PASS -> Accent; CheckStatus.WARN -> MediumColor; CheckStatus.FAIL -> HighColor }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 4.dp)) {
+                Box(Modifier.size(8.dp).background(color, CircleShape))
+                Text(c.label, color = if (c.status == CheckStatus.PASS) TextMain else TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
             }
         }
     }
