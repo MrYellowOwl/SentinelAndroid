@@ -282,6 +282,14 @@ object SiteSignatures {
         val keyPages: List<SiteLink>,
         val emails: List<String>,
         val phones: List<String>,
+        // Accessibility
+        val inputCount: Int = 0,
+        val inputsLabeled: Int = 0,
+        val hasLandmarks: Boolean = false,
+        val hasSkipLink: Boolean = false,
+        val zoomAllowed: Boolean = true,
+        val linkCount: Int = 0,
+        val linksWithText: Int = 0,
     )
 
     private val keyPagePatterns = listOf(
@@ -335,6 +343,51 @@ object SiteSignatures {
         val phones = Regex("""tel:([+0-9().\-\s]{7,})""", RegexOption.IGNORE_CASE).findAll(html)
             .map { it.groupValues[1].trim() }.distinct().take(10).toList()
 
-        return PageSignals(h1, h2, imgs.size, imgWithAlt, htmlLang, noindex, hasOg, hasSameAs, hasAuthor, wordCount, scriptCount, stylesheetCount, scriptsInHead, keyPages.values.toList(), emails.toList(), phones)
+        // Accessibility signals.
+        val inputs = Regex("<input\\b[^>]*>", RegexOption.IGNORE_CASE).findAll(html).map { it.value }.filter {
+            val type = Regex("""type\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(it)?.groupValues?.get(1)?.lowercase()
+            type !in listOf("hidden", "submit", "button", "image", "reset")
+        }.toList()
+        val ariaLabeled = inputs.count { Regex("""aria-label\s*=|aria-labelledby\s*=|\btitle\s*=""", RegexOption.IGNORE_CASE).containsMatchIn(it) }
+        val forLabels = Regex("""<label\b[^>]*\bfor\s*=""", RegexOption.IGNORE_CASE).findAll(html).count()
+        val inputsLabeled = minOf(inputs.size, ariaLabeled + forLabels)
+        val hasLandmarks = lower.contains("<main") || lower.contains("role=\"main\"") || lower.contains("role='main'")
+        val hasSkipLink = Regex("""<a\b[^>]*href\s*=\s*["']#(main|content|maincontent|skip)""", RegexOption.IGNORE_CASE).containsMatchIn(html) ||
+            lower.contains("skip to content") || lower.contains("skip to main") || lower.contains("skip navigation")
+        val viewportContent = Regex("""<meta[^>]*name\s*=\s*["']viewport["'][^>]*>""", RegexOption.IGNORE_CASE).find(html)?.value?.lowercase().orEmpty()
+        val zoomAllowed = !viewportContent.contains("user-scalable=no") && !Regex("""maximum-scale\s*=\s*1(\.0+)?\b""").containsMatchIn(viewportContent)
+        val anchors = Regex("<a\\b([^>]*)>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).findAll(html).toList()
+        val linksWithText = anchors.count { m ->
+            val attrs = m.groupValues[1]; val inner = m.groupValues[2]
+            inner.replace(Regex("<[^>]+>"), "").trim().isNotBlank() ||
+                Regex("""aria-label\s*=\s*["'][^"']+["']""", RegexOption.IGNORE_CASE).containsMatchIn(attrs) ||
+                Regex("""<img[^>]*\balt\s*=\s*["'][^"']+["']""", RegexOption.IGNORE_CASE).containsMatchIn(inner)
+        }
+
+        return PageSignals(h1, h2, imgs.size, imgWithAlt, htmlLang, noindex, hasOg, hasSameAs, hasAuthor, wordCount, scriptCount, stylesheetCount, scriptsInHead, keyPages.values.toList(), emails.toList(), phones,
+            inputs.size, inputsLabeled, hasLandmarks, hasSkipLink, zoomAllowed, anchors.size, linksWithText)
+    }
+
+    // --------------------------------------------------------------- stack versions
+
+    /** Detects versions of common stack components from the HTML and headers. */
+    fun versions(html: String, headers: Map<String, String>): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        Regex("""<meta[^>]*name\s*=\s*["']generator["'][^>]*content\s*=\s*["']WordPress\s+([\d.]+)""", RegexOption.IGNORE_CASE).find(html)?.let { out["WordPress"] = it.groupValues[1] }
+        Regex("""jquery[/.\-]?v?(\d+\.\d+(?:\.\d+)?)(?:\.slim)?(?:\.min)?\.js""", RegexOption.IGNORE_CASE).find(html)?.let { out["jQuery"] = it.groupValues[1] }
+        Regex("""bootstrap[/.\-]?v?(\d+\.\d+(?:\.\d+)?)(?:\.min)?\.(?:js|css)""", RegexOption.IGNORE_CASE).find(html)?.let { out["Bootstrap"] = it.groupValues[1] }
+        (headers["x-powered-by"] ?: "").let { Regex("""PHP/([\d.]+)""", RegexOption.IGNORE_CASE).find(it)?.let { m -> out["PHP"] = m.groupValues[1] } }
+        return out
+    }
+
+    /** Flags stack components that are outdated / end-of-life (baselines as of 2026). */
+    fun outdatedStack(versions: Map<String, String>): List<String> {
+        val out = ArrayList<String>()
+        fun major(v: String) = v.substringBefore('.').toIntOrNull() ?: 0
+        versions["WordPress"]?.let { if (major(it) in 1..5) out.add("WordPress $it is outdated (6.x is current).") }
+        versions["jQuery"]?.let { if (major(it) in 1..2) out.add("jQuery $it is outdated with known XSS issues (3.x is current).") }
+        versions["PHP"]?.let { if (major(it) in 1..7) out.add("PHP $it is end-of-life (8.x is current).") }
+        versions["Bootstrap"]?.let { if (major(it) in 1..3) out.add("Bootstrap $it is outdated (5.x is current).") }
+        return out
     }
 }

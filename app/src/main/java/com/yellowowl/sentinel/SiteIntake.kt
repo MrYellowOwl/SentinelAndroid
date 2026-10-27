@@ -174,8 +174,22 @@ object SiteIntake {
         val seo = SiteScore.seo(signals, meta.title, meta.description, meta.canonical, meta.viewport, httpsRedirect, hsts, compression,
             meta.schemaTypes, meta.favicon, robotsFound, hasSitemap, hasAnalytics, responseMs, htmlBytes)
         val aiScore = SiteScore.ai(signals, blockedAi, starBlocksAll, llmsTxt, meta.schemaTypes, meta.title, meta.description, meta.canonical, hasSitemap)
-        val flags = SiteScore.attentionFlags(httpsRedirect, hsts, compression, cert?.validTo, sslWeak, domainExpiryDays, blockedAi, starBlocksAll,
+        val a11y = SiteScore.accessibility(signals, meta.title)
+        val versions = SiteSignatures.versions(html, headerMap)
+        val secHeaders = linkedMapOf(
+            "Content-Security-Policy" to !headerMap["content-security-policy"].isNullOrBlank(),
+            "X-Frame-Options" to !headerMap["x-frame-options"].isNullOrBlank(),
+            "X-Content-Type-Options" to !headerMap["x-content-type-options"].isNullOrBlank(),
+            "Referrer-Policy" to !headerMap["referrer-policy"].isNullOrBlank(),
+            "Permissions-Policy" to !headerMap["permissions-policy"].isNullOrBlank(),
+            "Strict-Transport-Security" to hsts,
+        )
+        val baseFlags = SiteScore.attentionFlags(httpsRedirect, hsts, compression, cert?.validTo, sslWeak, domainExpiryDays, blockedAi, starBlocksAll,
             meta.title, meta.description, signals.h1Count, signals.noindex, dmarc, meta.schemaTypes, mixedContent, responseMs, meta.copyrightYear, currentYear, now)
+        val flags = baseFlags + SiteSignatures.outdatedStack(versions) + buildList {
+            if (secHeaders["Content-Security-Policy"] == false) add("No Content-Security-Policy header.")
+            if (secHeaders["X-Frame-Options"] == false) add("No X-Frame-Options header (clickjacking risk).")
+        }
 
         val cmsLabel = tech.cms ?: meta.generator?.substringBefore(' ')?.takeIf { it.isNotBlank() }
         val profile = SiteProfile(
@@ -234,7 +248,10 @@ object SiteIntake {
             presenceSearches = presence,
             seoScore = seo.score, seoGrade = seo.grade, seoChecks = seo.checks, seoCategories = seo.categories,
             aiScore = aiScore.score, aiGrade = aiScore.grade, aiChecks = aiScore.checks, aiCategories = aiScore.categories,
+            a11yScore = a11y.score, a11yGrade = a11y.grade, a11yChecks = a11y.checks, a11yCategories = a11y.categories,
             attentionFlags = flags,
+            versions = versions,
+            securityHeaders = secHeaders,
             aiCrawlersBlocked = blockedAi,
             llmsTxt = llmsTxt,
             keyPages = signals.keyPages,

@@ -157,6 +157,47 @@ object SiteScore {
         return build(c)
     }
 
+    // ------------------------------------------------------------------- Accessibility (weighted)
+
+    fun accessibility(s: SiteSignatures.PageSignals, title: String?): Result {
+        val c = ArrayList<ScoreCheck>()
+        fun add(label: String, cat: String, status: CheckStatus, weight: Int) = c.add(ScoreCheck(label, cat, status, weight))
+
+        add("Image alt coverage (≥ 90%)", "Content", when {
+            s.imgCount == 0 -> CheckStatus.PASS
+            s.imgWithAlt * 100 / s.imgCount >= 90 -> CheckStatus.PASS
+            s.imgWithAlt * 100 / s.imgCount >= 60 -> CheckStatus.WARN
+            else -> CheckStatus.FAIL
+        }, 18)
+        add("Page has a title", "Content", tri(!title.isNullOrBlank()), 8)
+
+        add("Language declared (<html lang>)", "Structure", tri(!s.htmlLang.isNullOrBlank()), 14)
+        add("Heading structure (one H1 + H2s)", "Structure", when {
+            s.h1Count == 1 && s.h2Count >= 1 -> CheckStatus.PASS
+            s.h1Count >= 1 -> CheckStatus.WARN
+            else -> CheckStatus.FAIL
+        }, 10)
+        add("Landmark regions (main / nav)", "Structure", tri(s.hasLandmarks), 12)
+
+        add("Links have discernible text", "Navigation", when {
+            s.linkCount == 0 -> CheckStatus.PASS
+            s.linksWithText * 100 / s.linkCount >= 95 -> CheckStatus.PASS
+            s.linksWithText * 100 / s.linkCount >= 80 -> CheckStatus.WARN
+            else -> CheckStatus.FAIL
+        }, 12)
+        add("Skip-to-content link", "Navigation", tri(s.hasSkipLink), 8)
+        add("Zoom not disabled", "Navigation", tri(s.zoomAllowed), 8)
+
+        add("Form inputs labeled", "Forms", when {
+            s.inputCount == 0 -> CheckStatus.PASS
+            s.inputsLabeled * 100 / s.inputCount >= 90 -> CheckStatus.PASS
+            s.inputsLabeled * 100 / s.inputCount >= 60 -> CheckStatus.WARN
+            else -> CheckStatus.FAIL
+        }, 10)
+
+        return build(c)
+    }
+
     // ------------------------------------------------------------------- robots.txt AI-crawler analysis
 
     val aiCrawlerAgents = listOf(

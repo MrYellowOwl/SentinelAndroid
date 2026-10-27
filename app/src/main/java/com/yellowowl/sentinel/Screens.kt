@@ -821,12 +821,14 @@ private fun SiteProfileReport(
         SurfaceCard {
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Eyebrow("SCORECARD · ${p.domain}")
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     p.seoScore?.let { ScorePill("SEO", it, p.seoGrade, Modifier.weight(1f)) }
-                    p.aiScore?.let { ScorePill("AI Visibility", it, p.aiGrade, Modifier.weight(1f)) }
+                    p.aiScore?.let { ScorePill("AI", it, p.aiGrade, Modifier.weight(1f)) }
+                    p.a11yScore?.let { ScorePill("A11y", it, p.a11yGrade, Modifier.weight(1f)) }
                 }
                 if (p.seoChecks.isNotEmpty()) ScoreBlock("SEO", p.seoCategories, p.seoChecks)
                 if (p.aiChecks.isNotEmpty()) ScoreBlock("AI Visibility", p.aiCategories, p.aiChecks)
+                if (p.a11yChecks.isNotEmpty()) ScoreBlock("Accessibility", p.a11yCategories, p.a11yChecks)
                 if (p.aiCrawlersBlocked.isNotEmpty()) Text("Blocks AI crawlers: ${p.aiCrawlersBlocked.joinToString(", ")}", color = HighColor, fontSize = 12.sp, lineHeight = 16.sp)
             }
         }
@@ -904,6 +906,7 @@ private fun SiteProfileReport(
         "CAA record" to (if (p.caa) "Present" else "None"),
         "SSL grade" to p.sslGrade,
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("SECURITY HEADERS", p.securityHeaders.map { it.key to (if (it.value) "Present" else "Missing") }, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("EMAIL", listOf(
         "Provider" to p.emailProvider, "SPF" to (if (p.spf) "Yes" else "No"),
         "DMARC" to (if (p.dmarc) "Yes" else "No"), "DKIM" to (if (p.dkimHint) "Detected" else "Not detected"),
@@ -914,6 +917,7 @@ private fun SiteProfileReport(
         "CMS / platform" to p.cms, "Admin login" to p.cmsAdminPath, "Framework" to p.framework,
         "Page builder" to p.pageBuilder, "Fonts" to p.fonts.joinToString(", ").ifBlank { null },
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("STACK VERSIONS", p.versions.map { it.key to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("THIRD-PARTY INTEGRATIONS", p.integrations.map { it.category to it.name }, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("IDS TO MIGRATE", p.analyticsIds.map { it.kind to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
 

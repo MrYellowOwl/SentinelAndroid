@@ -69,6 +69,34 @@ class WebScoreTest {
         assertTrue(ai.score in 1..99)
     }
 
+    @Test fun accessibilityScoreAndSignals() {
+        val good = "<html lang='en'><head><title>Acme Plumbers of Springfield IL</title>" +
+            "<meta name='viewport' content='width=device-width, initial-scale=1'></head>" +
+            "<body><a href='#main'>Skip to content</a><main><h1>Acme</h1><h2>Services</h2>" +
+            "<img src=a alt='team'><img src=b alt='van'>" +
+            "<form><label for='e'>Email</label><input id='e' type='text'></form>" +
+            "<a href='/about'>About us</a><a href='/contact'>Contact</a></main></body></html>"
+        val s = SiteSignatures.pageSignals(good, "https://acme.com/")
+        assertTrue(s.hasLandmarks); assertTrue(s.hasSkipLink); assertTrue(s.zoomAllowed)
+        assertEquals(1, s.inputCount); assertEquals(1, s.inputsLabeled)
+        val a = SiteScore.accessibility(s, "Acme Plumbers of Springfield IL")
+        assertTrue("a11y=${a.score}", a.score >= 90)
+
+        val bad = "<html><head><meta name='viewport' content='user-scalable=no'></head><body><img src=a><form><input type='text'></form></body></html>"
+        val sb = SiteSignatures.pageSignals(bad, null)
+        assertFalse(sb.zoomAllowed)
+        assertTrue(SiteScore.accessibility(sb, null).score < 40)
+    }
+
+    @Test fun stackVersionsAndOutdated() {
+        val html = "<meta name='generator' content='WordPress 6.5'><script src='/jquery-2.2.4.min.js'></script>"
+        val v = SiteSignatures.versions(html, mapOf("x-powered-by" to "PHP/7.4.3"))
+        assertEquals("6.5", v["WordPress"]); assertEquals("2.2.4", v["jQuery"]); assertEquals("7.4.3", v["PHP"])
+        val out = SiteSignatures.outdatedStack(v)
+        assertTrue(out.any { it.contains("jQuery") }); assertTrue(out.any { it.contains("PHP") })
+        assertFalse(out.any { it.contains("WordPress") })
+    }
+
     @Test fun attentionFlagsFire() {
         val flags = SiteScore.attentionFlags(
             httpsEnforced = false, hsts = false, compression = false,

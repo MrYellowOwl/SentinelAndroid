@@ -104,7 +104,13 @@ data class SiteProfile(
     val aiGrade: String? = null,
     val aiChecks: List<ScoreCheck> = emptyList(),
     val aiCategories: List<ScoreCategory> = emptyList(),
+    val a11yScore: Int? = null,
+    val a11yGrade: String? = null,
+    val a11yChecks: List<ScoreCheck> = emptyList(),
+    val a11yCategories: List<ScoreCategory> = emptyList(),
     val attentionFlags: List<String> = emptyList(),
+    val versions: Map<String, String> = emptyMap(),
+    val securityHeaders: Map<String, Boolean> = emptyMap(),
 
     // AI crawlers / structure signals
     val aiCrawlersBlocked: List<String> = emptyList(),
