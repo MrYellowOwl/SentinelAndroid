@@ -105,11 +105,13 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
     val cloudLookup by vm.cloudLookup.collectAsState()
     val fingerbankKey by vm.fingerbankKey.collectAsState()
     val webSecurityMode by vm.webSecurityMode.collectAsState()
+    val webProjects by vm.webProjects.collectAsState()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Dashboard) }
     var findingsFilter by rememberSaveable { mutableStateOf<Severity?>(null) }
     var hostDetailIp by rememberSaveable { mutableStateOf<String?>(null) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showHistory by rememberSaveable { mutableStateOf(false) }
+    var savedReportHtml by rememberSaveable { mutableStateOf<String?>(null) }
 
     val copyText: (String) -> Unit = { text ->
         runCatching {
@@ -149,8 +151,9 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
         }
     }
 
-    BackHandler(enabled = showHistory || showSettings || hostDetailIp != null || screen != AppScreen.Dashboard) {
+    BackHandler(enabled = savedReportHtml != null || showHistory || showSettings || hostDetailIp != null || screen != AppScreen.Dashboard) {
         when {
+            savedReportHtml != null -> savedReportHtml = null
             showHistory -> showHistory = false
             showSettings -> showSettings = false
             hostDetailIp != null -> hostDetailIp = null
@@ -207,6 +210,10 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
         }
     ) { padding ->
         val modifier = Modifier.padding(padding).consumeWindowInsets(padding)
+        savedReportHtml?.let { html ->
+            SavedReportScreen(modifier = modifier, html = html, onBack = { savedReportHtml = null })
+            return@Scaffold
+        }
         if (showHistory) {
             HistoryScreen(
                 modifier = modifier,
@@ -327,7 +334,15 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onShareSite = { fmt -> web.siteProfile?.let { if (!ReportExporter.shareSite(context, it, fmt)) Toast.makeText(context, "No app available to share the report.", Toast.LENGTH_SHORT).show() } },
                 onPrintSite = { web.siteProfile?.let { ReportExporter.printSitePdf(context, it) } },
                 onOpenUrl = openUrl,
-                onCopy = copyText
+                onCopy = copyText,
+                projects = webProjects,
+                onSaveClient = {
+                    if (vm.saveCurrentIntake()) Toast.makeText(context, "Saved to client projects.", Toast.LENGTH_SHORT).show()
+                    else Toast.makeText(context, "Run an audit first, then save.", Toast.LENGTH_SHORT).show()
+                },
+                onViewSaved = { savedReportHtml = it },
+                onRerun = vm::rerunIntake,
+                onDeleteProject = vm::removeWebProject
             )
             AppScreen.Tools -> ToolsScreen(
                 modifier = modifier,

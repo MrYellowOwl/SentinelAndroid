@@ -107,6 +107,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -713,7 +714,12 @@ internal fun WebsiteAuditScreen(
     onShareSite: (ReportExporter.Format) -> Unit = {},
     onPrintSite: () -> Unit = {},
     onOpenUrl: (String) -> Unit = {},
-    onCopy: (String) -> Unit = {}
+    onCopy: (String) -> Unit = {},
+    projects: List<ClientProject> = emptyList(),
+    onSaveClient: () -> Unit = {},
+    onViewSaved: (String) -> Unit = {},
+    onRerun: (String) -> Unit = {},
+    onDeleteProject: (String) -> Unit = {}
 ) {
     val focusManager = LocalFocusManager.current
     val run = {
@@ -767,6 +773,10 @@ internal fun WebsiteAuditScreen(
             }
         }
 
+        if (!securityMode && projects.isNotEmpty() && state.siteProfile == null && !state.busy) {
+            ClientsCard(projects, onViewSaved, onRerun, onDeleteProject)
+        }
+
         state.result?.let { result ->
             val counts = FindingMerge.countBySeverity(result.findings)
             SurfaceCard {
@@ -796,7 +806,7 @@ internal fun WebsiteAuditScreen(
         }
 
         state.siteProfile?.let { p ->
-            SiteProfileReport(p, onShareSite = onShareSite, onPrintSite = onPrintSite, onOpenUrl = onOpenUrl, onCopy = onCopy)
+            SiteProfileReport(p, onShareSite = onShareSite, onPrintSite = onPrintSite, onOpenUrl = onOpenUrl, onCopy = onCopy, onSaveClient = onSaveClient)
         }
 
         if (securityMode) Text(
@@ -809,12 +819,46 @@ internal fun WebsiteAuditScreen(
 // ---------------------------------------------------------------- Web developer intake report
 
 @Composable
+private fun ClientsCard(
+    projects: List<ClientProject>,
+    onView: (String) -> Unit,
+    onRerun: (String) -> Unit,
+    onDelete: (String) -> Unit
+) {
+    SurfaceCard {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Eyebrow("SAVED CLIENTS · ${projects.size}")
+            projects.forEach { proj ->
+                val latest = proj.latest
+                HorizontalDivider(color = Border)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(proj.label, color = TextMain, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        val sub = listOfNotNull(
+                            latest?.seo?.let { "SEO $it" }, latest?.ai?.let { "AI $it" }, latest?.a11y?.let { "A11y $it" }
+                        ).joinToString(" · ")
+                        Text(sub.ifBlank { proj.domain }, color = TextMuted, fontSize = 12.sp, maxLines = 1)
+                        Text("${proj.runCount} run(s) · last ${DateUtils.getRelativeTimeSpanString(proj.lastRun)}", color = TextMuted, fontSize = 11.sp)
+                    }
+                    latest?.let { TextButton(onClick = { onView(it.html) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("View", color = Accent, fontSize = 13.sp) } }
+                    TextButton(onClick = { onRerun(proj.domain) }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Re-run", color = Accent, fontSize = 13.sp) }
+                    IconButton(onClick = { onDelete(proj.domain) }, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove", tint = TextMuted, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SiteProfileReport(
     p: SiteProfile,
     onShareSite: (ReportExporter.Format) -> Unit,
     onPrintSite: () -> Unit,
     onOpenUrl: (String) -> Unit,
-    onCopy: (String) -> Unit
+    onCopy: (String) -> Unit,
+    onSaveClient: () -> Unit = {}
 ) {
     // Scores.
     if (p.seoScore != null || p.aiScore != null) {
@@ -859,6 +903,9 @@ private fun SiteProfileReport(
                 OutlinedButton(onClick = onPrintSite, border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) { Text("PDF", color = Accent, maxLines = 1) }
                 OutlinedButton(onClick = { onShareSite(ReportExporter.Format.CSV) }, border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) { Text("CSV", color = Accent, maxLines = 1) }
                 OutlinedButton(onClick = { onShareSite(ReportExporter.Format.JSON) }, border = BorderStroke(1.dp, Border), modifier = Modifier.weight(1f)) { Text("JSON", color = Accent, maxLines = 1) }
+            }
+            OutlinedButton(onClick = onSaveClient, border = BorderStroke(1.dp, Border), modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.History, null, tint = Accent, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Save for client", color = Accent, maxLines = 1)
             }
         }
     }
@@ -2513,6 +2560,34 @@ internal fun HistoryScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun SavedReportScreen(
+    modifier: Modifier,
+    html: String,
+    onBack: () -> Unit
+) {
+    Column(modifier.fillMaxSize()) {
+        TextButton(onClick = onBack, contentPadding = PaddingValues(start = 12.dp, top = 8.dp, end = 12.dp, bottom = 8.dp)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Accent, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Back to Web", color = Accent)
+        }
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    settings.builtInZoomControls = true
+                    settings.displayZoomControls = false
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
+                    isVerticalScrollBarEnabled = true
+                }
+            },
+            update = { it.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null) }
+        )
     }
 }
 

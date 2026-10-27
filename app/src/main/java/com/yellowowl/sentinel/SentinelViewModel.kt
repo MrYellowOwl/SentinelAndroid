@@ -142,6 +142,17 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
     val savedNetworks: StateFlow<List<SavedNetwork>> = NetworkStore.networks
     fun forgetNetwork(id: String) = NetworkStore.remove(app, id)
 
+    // ---- Saved web client projects ----
+    init { WebProjectStore.init(application) }
+    val webProjects: StateFlow<List<ClientProject>> = WebProjectStore.projects
+    fun saveCurrentIntake(): Boolean {
+        val profile = _web.value.siteProfile ?: return false
+        WebProjectStore.saveRun(app, profile, SiteReport.toHtml(profile, BuildConfig.VERSION_NAME))
+        return true
+    }
+    fun removeWebProject(domain: String) = WebProjectStore.remove(app, domain)
+    fun rerunIntake(domain: String) { setUrl(domain); runAudit() }
+
     // ---- Scheduled scans ----
     private val _scanSchedule = MutableStateFlow(SentinelSettings.scanSchedule(application))
     val scanSchedule: StateFlow<ScanSchedule> = _scanSchedule.asStateFlow()
