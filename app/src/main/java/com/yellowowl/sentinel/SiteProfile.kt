@@ -13,6 +13,8 @@ data class SiteDnsRecord(val type: String, val value: String)
 data class SiteTech(val name: String, val category: String)   // "Google Analytics 4" / "Analytics"
 data class SiteLink(val label: String, val url: String)
 data class SiteId(val kind: String, val value: String)        // "GA4", "G-XXXX"
+data class BrokenLink(val url: String, val status: Int)
+data class PageSample(val url: String, val title: String?, val words: Int, val status: Int)
 enum class CheckStatus { PASS, WARN, FAIL }
 /** One weighted scoring criterion. WARN earns half credit. [category] groups it within a score. */
 data class ScoreCheck(val label: String, val category: String, val status: CheckStatus, val weight: Int)
@@ -91,6 +93,10 @@ data class SiteProfile(
     val sitemapUrls: List<String> = emptyList(),
     val pageCount: Int? = null,
     val copyrightYear: String? = null,
+
+    // Deeper checks
+    val brokenLinks: List<BrokenLink> = emptyList(),
+    val sampledPages: List<PageSample> = emptyList(),
 
     // Presence (search links — detection of actual profiles needs APIs we don't require)
     val presenceSearches: List<SiteLink> = emptyList(),

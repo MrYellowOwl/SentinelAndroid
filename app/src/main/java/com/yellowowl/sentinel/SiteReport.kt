@@ -126,6 +126,9 @@ object SiteReport {
         section("Business") { row("Name", p.businessName); row("Phone", p.businessPhone); row("Address", p.businessAddress) }
         section("Contacts on page") { p.contactEmails.forEach { row("Email", it) }; p.contactPhones.forEach { row("Phone", it) } }
         section("Key pages") { p.keyPages.forEach { linkRow(it.label, it.url) } }
+        if (p.redirectChain.size > 1) section("Redirect chain") { row("Hops", p.redirectChain.joinToString(" → ")) }
+        section("Broken links") { p.brokenLinks.forEach { row("HTTP ${it.status}", it.url) } }
+        section("Sampled pages") { p.sampledPages.forEach { row(it.title ?: it.url, "${it.words} words · HTTP ${it.status}") } }
         section("Social") { p.socialLinks.forEach { linkRow(it.label, it.url) } }
         section("Online presence (search)") { p.presenceSearches.forEach { linkRow(it.label, it.url) } }
         section("DNS records") { p.dns.forEach { row(it.type, it.value) } }
@@ -184,6 +187,9 @@ object SiteReport {
         r("robots.txt", if (p.robotsFound) "Yes" else "No"); r("Pages (sitemap)", p.pageCount?.toString())
         p.contactEmails.forEach { r("Contact email", it) }; p.contactPhones.forEach { r("Contact phone", it) }
         p.keyPages.forEach { r("Key page: ${it.label}", it.url) }
+        if (p.redirectChain.size > 1) r("Redirect chain", p.redirectChain.joinToString(" -> "))
+        p.brokenLinks.forEach { r("Broken link (HTTP ${it.status})", it.url) }
+        p.sampledPages.forEach { r("Sampled page", "${it.title ?: it.url} — ${it.words} words — HTTP ${it.status}") }
         p.socialLinks.forEach { r("Social: ${it.label}", it.url) }
         p.versions.forEach { r("Version: ${it.key}", it.value) }
         p.securityHeaders.forEach { r("Security header: ${it.key}", if (it.value) "Present" else "Missing") }
@@ -238,6 +244,9 @@ object SiteReport {
             .put("schemaTypes", arr(p.schemaTypes)).put("copyright", p.copyrightYear ?: JSONObject.NULL))
         o.put("business", JSONObject().put("name", p.businessName ?: JSONObject.NULL).put("phone", p.businessPhone ?: JSONObject.NULL).put("address", p.businessAddress ?: JSONObject.NULL))
         o.put("structure", JSONObject().put("robots", p.robotsFound).put("pages", p.pageCount ?: JSONObject.NULL).put("sitemaps", arr(p.sitemapUrls)))
+        o.put("redirectChain", arr(p.redirectChain))
+        o.put("brokenLinks", JSONArray().apply { p.brokenLinks.forEach { put(JSONObject().put("url", it.url).put("status", it.status)) } })
+        o.put("sampledPages", JSONArray().apply { p.sampledPages.forEach { put(JSONObject().put("url", it.url).put("title", it.title ?: JSONObject.NULL).put("words", it.words).put("status", it.status)) } })
         o.put("contacts", JSONObject().put("emails", arr(p.contactEmails)).put("phones", arr(p.contactPhones)))
         o.put("keyPages", JSONArray().apply { p.keyPages.forEach { put(JSONObject().put("label", it.label).put("url", it.url)) } })
         o.put("social", JSONArray().apply { p.socialLinks.forEach { put(JSONObject().put("platform", it.label).put("url", it.url)) } })

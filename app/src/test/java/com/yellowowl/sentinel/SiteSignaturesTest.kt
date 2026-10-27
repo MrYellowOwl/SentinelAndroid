@@ -1,6 +1,7 @@
 package com.yellowowl.sentinel
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,6 +75,18 @@ class SiteSignaturesTest {
         assertTrue(who.created?.startsWith("2001") == true)
         assertTrue(who.expiry?.startsWith("2026") == true)
         assertEquals(listOf("ns1.domaincontrol.com", "ns2.domaincontrol.com"), who.nameServers)
+    }
+
+    @Test fun internalLinksResolveAndFilterToSameSite() {
+        val h = "<a href='/about'>a</a><a href='https://acme.com/blog'>b</a>" +
+            "<a href='https://other.com/x'>ext</a><a href='mailto:a@b.com'>m</a><a href='#top'>t</a>" +
+            "<a href='https://www.acme.com/contact'>c</a>"
+        val links = SiteSignatures.internalLinks(h, "https://acme.com/", "www.acme.com")
+        assertTrue(links.contains("https://acme.com/about"))
+        assertTrue(links.contains("https://www.acme.com/contact"))
+        assertFalse(links.any { it.contains("other.com") })
+        assertFalse(links.any { it.contains("mailto") })
+        assertEquals(3, links.size)
     }
 
     @Test fun infersProviders() {

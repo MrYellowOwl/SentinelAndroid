@@ -368,6 +368,22 @@ object SiteSignatures {
             inputs.size, inputsLabeled, hasLandmarks, hasSkipLink, zoomAllowed, anchors.size, linksWithText)
     }
 
+    /** Absolute same-site links from the page (for broken-link + multi-page sampling). Pure. */
+    fun internalLinks(html: String, baseUrl: String, host: String): List<String> {
+        val h = host.removePrefix("www.").lowercase()
+        val out = LinkedHashSet<String>()
+        for (raw in Regex("""href\s*=\s*["']([^"']+)["']""", RegexOption.IGNORE_CASE).findAll(html).map { it.groupValues[1].trim() }) {
+            if (raw.isBlank() || raw.startsWith("#")) continue
+            val low = raw.lowercase()
+            if (low.startsWith("mailto:") || low.startsWith("tel:") || low.startsWith("javascript:") || low.startsWith("data:")) continue
+            val abs = if (raw.startsWith("http", true)) raw else runCatching { java.net.URI(baseUrl).resolve(raw).toString() }.getOrNull() ?: continue
+            val absHost = runCatching { java.net.URI(abs).host?.removePrefix("www.")?.lowercase() }.getOrNull() ?: continue
+            if (absHost == h) out.add(abs.substringBefore('#'))
+            if (out.size >= 50) break
+        }
+        return out.toList()
+    }
+
     // --------------------------------------------------------------- stack versions
 
     /** Detects versions of common stack components from the HTML and headers. */

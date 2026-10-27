@@ -7,7 +7,10 @@ import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
@@ -184,11 +187,25 @@ object SiteIntake {
             "Permissions-Policy" to !headerMap["permissions-policy"].isNullOrBlank(),
             "Strict-Transport-Security" to hsts,
         )
+        // Deeper checks (parallel): redirect trace, broken-link sampling, multi-page content sampling.
+        val deep = coroutineScope {
+            val redirJob = async { traceRedirects("http://$apex/") }
+            val internal = SiteSignatures.internalLinks(html, canonicalUrl, canonicalHost)
+            val brokenJob = async { sampleBrokenLinks(internal.take(12)) }
+            val sampleJob = async { samplePages(internal, canonicalUrl) }
+            Triple(redirJob.await(), brokenJob.await(), sampleJob.await())
+        }
+        val redirectChain = deep.first
+        val brokenLinks = deep.second
+        val sampledPages = deep.third
+
         val baseFlags = SiteScore.attentionFlags(httpsRedirect, hsts, compression, cert?.validTo, sslWeak, domainExpiryDays, blockedAi, starBlocksAll,
             meta.title, meta.description, signals.h1Count, signals.noindex, dmarc, meta.schemaTypes, mixedContent, responseMs, meta.copyrightYear, currentYear, now)
         val flags = baseFlags + SiteSignatures.outdatedStack(versions) + buildList {
             if (secHeaders["Content-Security-Policy"] == false) add("No Content-Security-Policy header.")
             if (secHeaders["X-Frame-Options"] == false) add("No X-Frame-Options header (clickjacking risk).")
+            if (redirectChain.size > 3) add("${redirectChain.size - 1} redirect hops before the homepage loads.")
+            if (brokenLinks.isNotEmpty()) add("${brokenLinks.size} broken link(s) found on the homepage.")
         }
 
         val cmsLabel = tech.cms ?: meta.generator?.substringBefore(' ')?.takeIf { it.isNotBlank() }
@@ -200,7 +217,6 @@ object SiteIntake {
             httpsRedirect = httpsRedirect,
             finalUrl = finalUrl?.toString() ?: canonicalUrl,
             statusCode = primary?.code,
-            redirectChain = emptyList(),
             ip = ip,
             hostingProvider = hosting,
             asn = asn,
@@ -245,6 +261,9 @@ object SiteIntake {
             sitemapUrls = sitemapRefs.take(10),
             pageCount = pageCount,
             copyrightYear = meta.copyrightYear,
+            redirectChain = redirectChain,
+            brokenLinks = brokenLinks,
+            sampledPages = sampledPages,
             presenceSearches = presence,
             seoScore = seo.score, seoGrade = seo.grade, seoChecks = seo.checks, seoCategories = seo.categories,
             aiScore = aiScore.score, aiGrade = aiScore.grade, aiChecks = aiScore.checks, aiCategories = aiScore.categories,
@@ -272,6 +291,53 @@ object SiteIntake {
         if (allDns.isEmpty() && html.isBlank())
             Result.failure(IllegalStateException("Couldn't reach that domain — check the spelling or your connection."))
         else Result.success(profile)
+    }
+
+    /** Follows Location headers manually to reveal the redirect chain (http → https → www …). */
+    private suspend fun traceRedirects(start: String): List<String> {
+        val chain = ArrayList<String>()
+        var url = start
+        var hops = 0
+        while (hops++ < 6) {
+            chain.add(url)
+            val r = runCatching { Http.get(url, followRedirects = false, timeoutMillis = 6_000, maxBytes = 2048) }.getOrNull() ?: break
+            if (WebChecks.isRedirect(r.code)) {
+                val loc = r.header("location") ?: break
+                val next = runCatching { WebChecks.resolveRedirect(java.net.URI(url).toURL(), loc)?.toString() }.getOrNull() ?: break
+                if (next == url || next in chain) break
+                url = next
+            } else break
+        }
+        return chain
+    }
+
+    /** GETs each sampled internal link and reports those returning 4xx/5xx. Network failures are skipped. */
+    private suspend fun sampleBrokenLinks(links: List<String>): List<BrokenLink> = coroutineScope {
+        val limiter = Semaphore(6)
+        links.map { link ->
+            async {
+                limiter.withPermit {
+                    val r = runCatching { Http.get(link, timeoutMillis = 5_000, maxBytes = 2048, followRedirects = true) }.getOrNull()
+                    if (r != null && r.code >= 400) BrokenLink(link, r.code) else null
+                }
+            }
+        }.awaitAll().filterNotNull()
+    }
+
+    /** Fetches a few inner pages and records title + word count, so scores reflect more than the homepage. */
+    private suspend fun samplePages(internal: List<String>, canonicalUrl: String): List<PageSample> {
+        val home = canonicalUrl.trimEnd('/')
+        val candidates = internal.map { it.trimEnd('/') }.filter { it != home }.distinct().take(3)
+        return coroutineScope {
+            candidates.map { u ->
+                async {
+                    val r = runCatching { Http.get(u, timeoutMillis = 8_000, maxBytes = 400 * 1024) }.getOrNull()
+                    val title = r?.body?.let { SiteSignatures.meta(it).title }
+                    val words = r?.body?.let { SiteSignatures.pageSignals(it, u).wordCount } ?: 0
+                    PageSample(u, title, words, r?.code ?: 0)
+                }
+            }.awaitAll()
+        }
     }
 
     private fun readCert(host: String): CertData? = runCatching {

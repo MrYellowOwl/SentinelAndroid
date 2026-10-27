@@ -918,6 +918,7 @@ private fun SiteProfileReport(
         "Page builder" to p.pageBuilder, "Fonts" to p.fonts.joinToString(", ").ifBlank { null },
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("STACK VERSIONS", p.versions.map { it.key to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("REDIRECT CHAIN", if (p.redirectChain.size > 1) listOf("Hops" to p.redirectChain.joinToString("  →  ")) else emptyList(), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("THIRD-PARTY INTEGRATIONS", p.integrations.map { it.category to it.name }, onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("IDS TO MIGRATE", p.analyticsIds.map { it.kind to it.value }, onCopy = onCopy, onOpenUrl = onOpenUrl)
 
@@ -937,6 +938,8 @@ private fun SiteProfileReport(
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("CONTACTS ON PAGE", (p.contactEmails.map { "Email" to it } + p.contactPhones.map { "Phone" to it }), onCopy = onCopy, onOpenUrl = onOpenUrl)
     WebInfoCard("KEY PAGES", emptyList(), linkRows = p.keyPages, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("BROKEN LINKS", p.brokenLinks.map { "HTTP ${it.status}" to it.url }, onCopy = onCopy, onOpenUrl = onOpenUrl)
+    WebInfoCard("SAMPLED PAGES", p.sampledPages.map { (it.title ?: it.url) to "${it.words} words · HTTP ${it.status}" }, onCopy = onCopy, onOpenUrl = onOpenUrl)
 
     GroupLabel("MARKETING & PRESENCE")
     WebInfoCard("SOCIAL", emptyList(), linkRows = p.socialLinks, onCopy = onCopy, onOpenUrl = onOpenUrl)
