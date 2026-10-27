@@ -134,6 +134,15 @@ data class SiteProfile(
     val stylesheetCount: Int? = null,
     val scriptsInHead: Int? = null,
 
+    // Core Web Vitals (Google PageSpeed Insights — lab data, mobile; only when a PSI key is set)
+    val cwvPerformance: Int? = null,   // Lighthouse performance score, 0–100
+    val cwvLcpMs: Int? = null,         // Largest Contentful Paint
+    val cwvCls: Double? = null,        // Cumulative Layout Shift (unitless)
+    val cwvInpMs: Int? = null,         // Interaction to Next Paint (or TBT proxy)
+    val cwvFcpMs: Int? = null,         // First Contentful Paint
+    val cwvTbtMs: Int? = null,         // Total Blocking Time
+    val cwvStrategy: String? = null,   // "mobile" / "desktop"
+
     // Hosting location & DNS security
     val hostingLocation: String? = null,
     val dnssec: Boolean = false,

@@ -28,7 +28,7 @@ object SiteIntake {
     private suspend fun fetch(url: String): Http.Result? =
         runCatching { Http.get(url, timeoutMillis = 12_000, maxBytes = 768 * 1024) }.getOrNull()
 
-    suspend fun collect(input: String): Result<SiteProfile> = withContext(Dispatchers.IO) {
+    suspend fun collect(input: String, pagespeedKey: String? = null): Result<SiteProfile> = withContext(Dispatchers.IO) {
         val notes = ArrayList<String>()
         val url = runCatching { WebChecks.normalizeUrl(input) }.getOrNull()
             ?: return@withContext Result.failure(IllegalArgumentException("Enter a valid domain or URL, e.g. example.com"))
@@ -199,6 +199,16 @@ object SiteIntake {
         val brokenLinks = deep.second
         val sampledPages = deep.third
 
+        // Core Web Vitals via PageSpeed Insights — opt-in (only with a key), display-only, non-fatal.
+        val cwv = if (!pagespeedKey.isNullOrBlank()) {
+            runCatching {
+                val psiUrl = PageSpeed.endpoint(finalUrl?.toString() ?: canonicalUrl, pagespeedKey, "mobile")
+                Http.get(psiUrl, timeoutMillis = 30_000, maxBytes = 3 * 1024 * 1024)?.takeIf { it.code in 200..299 }?.body?.let { PageSpeed.parse(it) }
+            }.getOrNull().also {
+                if (it == null) notes.add("PageSpeed Insights didn't return data (rate limit, key, or the site wasn't reachable by Google).")
+            }
+        } else null
+
         val baseFlags = SiteScore.attentionFlags(httpsRedirect, hsts, compression, cert?.validTo, sslWeak, domainExpiryDays, blockedAi, starBlocksAll,
             meta.title, meta.description, signals.h1Count, signals.noindex, dmarc, meta.schemaTypes, mixedContent, responseMs, meta.copyrightYear, currentYear, now)
         val flags = baseFlags + SiteSignatures.outdatedStack(versions) + buildList {
@@ -285,6 +295,13 @@ object SiteIntake {
             dnssec = dnssec,
             caa = caa,
             sslGrade = sslGrade,
+            cwvPerformance = cwv?.performance,
+            cwvLcpMs = cwv?.lcpMs,
+            cwvCls = cwv?.cls,
+            cwvInpMs = cwv?.inpMs,
+            cwvFcpMs = cwv?.fcpMs,
+            cwvTbtMs = cwv?.tbtMs,
+            cwvStrategy = if (cwv != null) "mobile" else null,
             generatedAt = now,
             notes = notes,
         )

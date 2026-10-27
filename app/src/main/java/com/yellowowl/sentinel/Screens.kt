@@ -846,6 +846,14 @@ private fun ClientsCard(
                         Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove", tint = TextMuted, modifier = Modifier.size(18.dp))
                     }
                 }
+                // Changes since the previous audit (runs are newest-first).
+                val changes = if (proj.runs.size >= 2) SiteMonitor.changesSince(proj.runs[1], proj.runs[0]) else emptyList()
+                if (changes.isNotEmpty()) {
+                    Column(Modifier.fillMaxWidth().padding(start = 2.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text("${changes.size} change(s) since previous audit", color = MediumColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        changes.forEach { Text("• $it", color = TextMuted, fontSize = 11.sp, lineHeight = 15.sp) }
+                    }
+                }
             }
         }
     }
@@ -966,6 +974,40 @@ private fun SiteProfileReport(
         "Render-blocking (head scripts)" to p.scriptsInHead?.toString(),
         "CDN" to p.cdn,
     ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    if (p.cwvPerformance != null || p.cwvLcpMs != null) {
+        WebInfoCard("CORE WEB VITALS · PAGESPEED", listOf(
+            "Performance" to p.cwvPerformance?.let { "$it/100 (${p.cwvStrategy ?: "mobile"})" },
+            "LCP" to p.cwvLcpMs?.let { "%.1f s · %s".format(it / 1000.0, PageSpeed.lcpRating(it)) },
+            "CLS" to p.cwvCls?.let { "$it · ${PageSpeed.clsRating(it)}" },
+            "INP" to p.cwvInpMs?.let { "$it ms · ${PageSpeed.inpRating(it)}" },
+            "FCP" to p.cwvFcpMs?.let { "%.1f s".format(it / 1000.0) },
+            "TBT" to p.cwvTbtMs?.let { "$it ms" },
+        ), onCopy = onCopy, onOpenUrl = onOpenUrl)
+    }
+    val expiry = remember(p) { SiteMonitor.expiryWatch(p, System.currentTimeMillis()) }
+    if (expiry.isNotEmpty()) {
+        SurfaceCard {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Eyebrow("EXPIRY WATCH")
+                expiry.forEach { e ->
+                    val col = when (e.level) {
+                        SiteMonitor.ExpiryLevel.EXPIRED, SiteMonitor.ExpiryLevel.CRITICAL -> HighColor
+                        SiteMonitor.ExpiryLevel.SOON -> MediumColor
+                        else -> LowColor
+                    }
+                    val txt = when {
+                        e.daysRemaining == null -> e.date ?: "—"
+                        e.daysRemaining < 0 -> "Expired · ${e.date}"
+                        else -> "${e.daysRemaining} days · ${e.date}"
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(e.label, color = TextMain, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                        Text(txt, color = col, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
 
     GroupLabel("DOMAIN, DNS & SECURITY")
     WebInfoCard("DOMAIN & REGISTRAR", listOf(
@@ -2297,6 +2339,8 @@ internal fun SettingsScreen(
     onCloudLookupChange: (Boolean) -> Unit,
     fingerbankKey: String,
     onFingerbankChange: (String) -> Unit,
+    pagespeedKey: String,
+    onPagespeedChange: (String) -> Unit,
     webSecurityMode: Boolean,
     onWebModeChange: (Boolean) -> Unit,
     historyCount: Int,
@@ -2310,6 +2354,7 @@ internal fun SettingsScreen(
     var shodanDraft by rememberSaveable(shodanKey) { mutableStateOf(shodanKey) }
     var vtDraft by rememberSaveable(vtKey) { mutableStateOf(vtKey) }
     var fingerbankDraft by rememberSaveable(fingerbankKey) { mutableStateOf(fingerbankKey) }
+    var pagespeedDraft by rememberSaveable(pagespeedKey) { mutableStateOf(pagespeedKey) }
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -2402,6 +2447,17 @@ internal fun SettingsScreen(
                 ToolField(vtDraft, { vtDraft = it }, "VirusTotal API key", enabled = true, onGo = { onVtChange(vtDraft) })
                 OutlinedButton(onClick = { onShodanChange(shodanDraft); onVtChange(vtDraft) }, enabled = shodanDraft != shodanKey || vtDraft != vtKey, border = BorderStroke(1.dp, Border)) {
                     Text("Save keys", color = Accent)
+                }
+            }
+        }
+
+        // ---- PageSpeed Insights (web intake) ----
+        item {
+            SettingsCard(Icons.Filled.PlayArrow, "PAGESPEED INSIGHTS", "Real Core Web Vitals (optional)") {
+                Text("Add a free Google PageSpeed Insights API key to pull real Core Web Vitals (LCP, CLS, INP) into the website intake report. Without a key this step is skipped — scores are unaffected. Get a key at the Google Cloud console; stored only on this device.", color = TextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+                ToolField(pagespeedDraft, { pagespeedDraft = it }, "PageSpeed API key (optional)", enabled = true, onGo = { onPagespeedChange(pagespeedDraft) })
+                OutlinedButton(onClick = { onPagespeedChange(pagespeedDraft) }, enabled = pagespeedDraft != pagespeedKey, border = BorderStroke(1.dp, Border)) {
+                    Text("Save key", color = Accent)
                 }
             }
         }

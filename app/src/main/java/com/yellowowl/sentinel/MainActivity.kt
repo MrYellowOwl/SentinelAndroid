@@ -104,6 +104,7 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
     val vtKey by vm.vtKey.collectAsState()
     val cloudLookup by vm.cloudLookup.collectAsState()
     val fingerbankKey by vm.fingerbankKey.collectAsState()
+    val pagespeedKey by vm.pagespeedKey.collectAsState()
     val webSecurityMode by vm.webSecurityMode.collectAsState()
     val webProjects by vm.webProjects.collectAsState()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Dashboard) }
@@ -248,6 +249,8 @@ private fun SentinelApp(vm: SentinelViewModel = viewModel()) {
                 onCloudLookupChange = vm::setCloudLookup,
                 fingerbankKey = fingerbankKey,
                 onFingerbankChange = vm::setFingerbankKey,
+                pagespeedKey = pagespeedKey,
+                onPagespeedChange = vm::setPagespeedKey,
                 webSecurityMode = webSecurityMode,
                 onWebModeChange = vm::setWebSecurityMode,
                 historyCount = history.size,

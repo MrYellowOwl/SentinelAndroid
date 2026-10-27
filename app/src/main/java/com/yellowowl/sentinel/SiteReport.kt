@@ -122,6 +122,25 @@ object SiteReport {
             row("Scripts", p.scriptCount?.toString()); row("Stylesheets", p.stylesheetCount?.toString())
             row("Render-blocking head scripts", p.scriptsInHead?.toString()); row("Server header", p.serverHeader); row("X-Powered-By", p.poweredBy)
         }
+        section("Core Web Vitals (PageSpeed)") {
+            if (p.cwvPerformance != null) row("Performance score", "${p.cwvPerformance}/100 (${p.cwvStrategy ?: "mobile"}, lab)")
+            p.cwvLcpMs?.let { row("Largest Contentful Paint", "${"%.1f".format(it / 1000.0)} s — ${PageSpeed.lcpRating(it)}") }
+            p.cwvCls?.let { row("Cumulative Layout Shift", "$it — ${PageSpeed.clsRating(it)}") }
+            p.cwvInpMs?.let { row("Interaction to Next Paint", "$it ms — ${PageSpeed.inpRating(it)}") }
+            p.cwvFcpMs?.let { row("First Contentful Paint", "${"%.1f".format(it / 1000.0)} s") }
+            p.cwvTbtMs?.let { row("Total Blocking Time", "$it ms") }
+        }
+        section("Expiry watch") {
+            SiteMonitor.expiryWatch(p, System.currentTimeMillis()).forEach { e ->
+                val d = e.daysRemaining
+                val txt = when {
+                    d == null -> e.date ?: "—"
+                    d < 0 -> "EXPIRED (${e.date})"
+                    else -> "$d day(s) left — ${e.date}"
+                }
+                row(e.label, txt)
+            }
+        }
         section("Domain & registrar") {
             row("Registrar", p.registrar); row("Created", p.domainCreated); row("Updated", p.domainUpdated); row("Expires", p.domainExpiry)
             row("DNS host", p.dnsHost); row("Name servers", p.nameServers.joinToString(", "))
@@ -201,6 +220,10 @@ object SiteReport {
         r("IP", p.ip); r("Hosting", p.hostingProvider); r("Location", p.hostingLocation); r("ASN", p.asn); r("CDN", p.cdn)
         r("Response time", p.responseMs?.let { "$it ms" }); r("HTML size", p.htmlBytes?.let { "${it / 1024} KB" })
         r("Scripts", p.scriptCount?.toString()); r("Stylesheets", p.stylesheetCount?.toString())
+        r("CWV performance", p.cwvPerformance?.let { "$it/100 (${p.cwvStrategy ?: "mobile"})" })
+        r("CWV LCP", p.cwvLcpMs?.let { "$it ms" }); r("CWV CLS", p.cwvCls?.toString()); r("CWV INP", p.cwvInpMs?.let { "$it ms" })
+        r("CWV FCP", p.cwvFcpMs?.let { "$it ms" }); r("CWV TBT", p.cwvTbtMs?.let { "$it ms" })
+        SiteMonitor.expiryWatch(p, System.currentTimeMillis()).forEach { e -> r("Expiry: ${e.label}", e.daysRemaining?.let { d -> "$d days (${e.date})" } ?: e.date) }
         r("Registrar", p.registrar); r("Created", p.domainCreated); r("Updated", p.domainUpdated); r("Expires", p.domainExpiry)
         r("DNS host", p.dnsHost); r("Name servers", p.nameServers.joinToString("; "))
         r("Cert issuer", p.certIssuer); r("Cert expires", date(p.certValidTo)); r("Cert signature", p.certSigAlg)
@@ -258,6 +281,12 @@ object SiteReport {
             .put("server", p.serverHeader ?: JSONObject.NULL).put("poweredBy", p.poweredBy ?: JSONObject.NULL))
         o.put("performance", JSONObject().put("responseMs", p.responseMs ?: JSONObject.NULL).put("htmlBytes", p.htmlBytes ?: JSONObject.NULL)
             .put("scripts", p.scriptCount ?: JSONObject.NULL).put("stylesheets", p.stylesheetCount ?: JSONObject.NULL).put("headScripts", p.scriptsInHead ?: JSONObject.NULL))
+        o.put("coreWebVitals", JSONObject().put("strategy", p.cwvStrategy ?: JSONObject.NULL).put("performance", p.cwvPerformance ?: JSONObject.NULL)
+            .put("lcpMs", p.cwvLcpMs ?: JSONObject.NULL).put("cls", p.cwvCls ?: JSONObject.NULL).put("inpMs", p.cwvInpMs ?: JSONObject.NULL)
+            .put("fcpMs", p.cwvFcpMs ?: JSONObject.NULL).put("tbtMs", p.cwvTbtMs ?: JSONObject.NULL))
+        o.put("expiryWatch", JSONArray().apply {
+            SiteMonitor.expiryWatch(p, System.currentTimeMillis()).forEach { put(JSONObject().put("label", it.label).put("date", it.date ?: JSONObject.NULL).put("daysRemaining", it.daysRemaining ?: JSONObject.NULL).put("level", it.level.name)) }
+        })
         o.put("domainReg", JSONObject().put("registrar", p.registrar ?: JSONObject.NULL).put("created", p.domainCreated ?: JSONObject.NULL)
             .put("updated", p.domainUpdated ?: JSONObject.NULL).put("expires", p.domainExpiry ?: JSONObject.NULL)
             .put("dnsHost", p.dnsHost ?: JSONObject.NULL).put("nameServers", arr(p.nameServers)))

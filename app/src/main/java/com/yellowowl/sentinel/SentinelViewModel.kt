@@ -130,6 +130,10 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
     val fingerbankKey: StateFlow<String> = _fingerbankKey.asStateFlow()
     fun setFingerbankKey(key: String) { SentinelSettings.setFingerbankKey(app, key); _fingerbankKey.value = key }
 
+    private val _pagespeedKey = MutableStateFlow(SentinelSettings.pagespeedKey(application))
+    val pagespeedKey: StateFlow<String> = _pagespeedKey.asStateFlow()
+    fun setPagespeedKey(key: String) { SentinelSettings.setPagespeedKey(app, key); _pagespeedKey.value = key }
+
     // ---- Device nicknames ----
     val nicknames: StateFlow<Map<String, String>> = NicknameStore.names
     fun setNickname(device: DeviceResult, name: String) = NicknameStore.set(app, Nicknames.keyFor(device), name)
@@ -296,7 +300,7 @@ class SentinelViewModel(application: Application) : AndroidViewModel(application
         // Web-developer intake mode (default): a comprehensive site profile, not a security scan.
         if (!_webSecurityMode.value) {
             viewModelScope.launch {
-                SiteIntake.collect(state.url)
+                SiteIntake.collect(state.url, _pagespeedKey.value.ifBlank { null })
                     .onSuccess { profile -> _web.update { it.copy(busy = false, siteProfile = profile) } }
                     .onFailure { e -> _web.update { it.copy(busy = false, error = e.message ?: "Couldn't build the intake report.") } }
             }

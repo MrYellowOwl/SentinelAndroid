@@ -20,6 +20,7 @@ object SentinelSettings {
     private const val KEY_CLOUD_LOOKUP = "cloud_lookup"
     private const val KEY_FINGERBANK = "fingerbank_key"
     private const val KEY_VT = "virustotal_key"
+    private const val KEY_PAGESPEED = "pagespeed_key"
 
     data class LastScan(val cidr: String, val at: Long, val devices: Int)
 
@@ -84,6 +85,9 @@ object SentinelSettings {
     fun setCloudLookupEnabled(context: Context, enabled: Boolean) { prefs(context).edit().putBoolean(KEY_CLOUD_LOOKUP, enabled).apply() }
     fun fingerbankKey(context: Context): String = prefs(context).getString(KEY_FINGERBANK, "").orEmpty()
     fun setFingerbankKey(context: Context, key: String) { prefs(context).edit().putString(KEY_FINGERBANK, key.trim()).apply() }
+
+    fun pagespeedKey(context: Context): String = prefs(context).getString(KEY_PAGESPEED, "").orEmpty()
+    fun setPagespeedKey(context: Context, key: String) { prefs(context).edit().putString(KEY_PAGESPEED, key.trim()).apply() }
 
     fun scopeText(context: Context): String = prefs(context).getString(KEY_SCOPE, "").orEmpty()
 
