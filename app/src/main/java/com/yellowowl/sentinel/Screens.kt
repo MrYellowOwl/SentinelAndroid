@@ -860,6 +860,39 @@ private fun SiteProfileReport(
     onCopy: (String) -> Unit,
     onSaveClient: () -> Unit = {}
 ) {
+    // Executive summary (plain-English, client-facing).
+    val summary = remember(p) { SiteSummary.executiveSummary(p) }
+    if (summary.isNotEmpty()) {
+        SurfaceCard {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Eyebrow("EXECUTIVE SUMMARY")
+                summary.forEach { Text(it, color = TextMain, fontSize = 13.sp, lineHeight = 19.sp) }
+            }
+        }
+    }
+
+    // Quick wins (prioritized fixes).
+    val wins = remember(p) { SiteSummary.quickWins(p) }
+    if (wins.isNotEmpty()) {
+        SurfaceCard {
+            Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Eyebrow("QUICK WINS · TOP PRIORITIES")
+                wins.forEach { w ->
+                    val col = when (w.impact) { WinImpact.HIGH -> HighColor; WinImpact.MEDIUM -> MediumColor; WinImpact.LOW -> TextMuted }
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.padding(top = 2.dp).background(col.copy(alpha = 0.15f), RoundedCornerShape(999.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+                            Text(w.impact.label, color = col, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp, maxLines = 1)
+                        }
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(w.title, color = TextMain, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, lineHeight = 17.sp)
+                            Text(w.why, color = TextMuted, fontSize = 11.5.sp, lineHeight = 15.sp)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Scores.
     if (p.seoScore != null || p.aiScore != null) {
         SurfaceCard {

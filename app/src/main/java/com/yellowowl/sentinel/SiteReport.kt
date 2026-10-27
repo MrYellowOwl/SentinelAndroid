@@ -53,11 +53,25 @@ object SiteReport {
                 ".chk{padding:3px 0;font-size:12px;display:flex;align-items:center;gap:7px;border:0}.dot{width:9px;height:9px;border-radius:50%;flex:none}" +
                 ".cglabel{font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:#9ca3af;margin:8px 0 2px;font-weight:700}" +
                 "section{page-break-inside:avoid}footer{margin-top:26px;border-top:1px solid #e5e7eb;padding-top:8px;color:#9ca3af;font-size:11px}" +
+                ".exec{background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:13px 16px;margin:16px 0;page-break-inside:avoid}" +
+                ".exec h2{margin:0 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:#0a8f6e}.exec p{margin:4px 0;font-size:13px;color:#134e4a;line-height:1.5}" +
+                ".wins{margin:16px 0;page-break-inside:avoid}.wins h2{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:#0a8f6e;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin:0 0 6px}" +
+                ".win{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid #f1f2f4}.win:last-child{border-bottom:0}" +
+                ".badge{flex:none;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:2px 7px;border-radius:999px;color:#fff;white-space:nowrap}" +
+                ".win .wt{font-weight:600;color:#14142b}.win .ww{color:#6b7280;font-size:11.5px;display:block;margin-top:1px;line-height:1.4}" +
                 "@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}"
         )
         sb.append("</style></head><body><div class=\"wrap\">")
 
         sb.append("<header class=\"rpt\"><h1>Website intake</h1><div class=\"meta\">${esc(p.domain)} · $generated · Sentinel $appVersion</div></header>")
+
+        // Executive summary (plain-English)
+        val summary = SiteSummary.executiveSummary(p)
+        if (summary.isNotEmpty()) {
+            sb.append("<div class=\"exec\"><h2>Executive summary</h2>")
+            summary.forEach { sb.append("<p>${esc(it)}</p>") }
+            sb.append("</div>")
+        }
 
         // Scorecard
         if (p.seoScore != null || p.aiScore != null) {
@@ -75,6 +89,17 @@ object SiteReport {
             scoreCard("SEO", p.seoScore, p.seoGrade, p.seoCategories)
             scoreCard("AI Visibility", p.aiScore, p.aiGrade, p.aiCategories)
             scoreCard("Accessibility", p.a11yScore, p.a11yGrade, p.a11yCategories)
+            sb.append("</div>")
+        }
+
+        // Quick wins (prioritized fixes)
+        val wins = SiteSummary.quickWins(p)
+        if (wins.isNotEmpty()) {
+            sb.append("<div class=\"wins\"><h2>Quick wins — top priorities</h2>")
+            wins.forEach { w ->
+                val col = when (w.impact) { WinImpact.HIGH -> "#dc2626"; WinImpact.MEDIUM -> "#d97706"; WinImpact.LOW -> "#6b7280" }
+                sb.append("<div class=\"win\"><span class=\"badge\" style=\"background:$col\">${esc(w.impact.label)}</span><span><span class=\"wt\">${esc(w.title)}</span><span class=\"ww\">${esc(w.why)}</span></span></div>")
+            }
             sb.append("</div>")
         }
 
@@ -171,6 +196,8 @@ object SiteReport {
         p.a11yCategories.forEach { r("A11y · ${it.name}", "${it.earned}/${it.possible}") }
         r("Blocks AI crawlers", p.aiCrawlersBlocked.joinToString("; ").ifBlank { null }); r("llms.txt", if (p.llmsTxt) "Present" else "Absent")
         p.attentionFlags.forEachIndexed { i, f -> r("Attention ${i + 1}", f) }
+        SiteSummary.executiveSummary(p).forEachIndexed { i, s -> r("Summary ${i + 1}", s) }
+        SiteSummary.quickWins(p).forEachIndexed { i, w -> r("Quick win ${i + 1} [${w.impact.label}]", "${w.title} — ${w.why}") }
         r("IP", p.ip); r("Hosting", p.hostingProvider); r("Location", p.hostingLocation); r("ASN", p.asn); r("CDN", p.cdn)
         r("Response time", p.responseMs?.let { "$it ms" }); r("HTML size", p.htmlBytes?.let { "${it / 1024} KB" })
         r("Scripts", p.scriptCount?.toString()); r("Stylesheets", p.stylesheetCount?.toString())
@@ -222,6 +249,10 @@ object SiteReport {
         o.put("versions", JSONObject().apply { p.versions.forEach { put(it.key, it.value) } })
         o.put("securityHeaders", JSONObject().apply { p.securityHeaders.forEach { put(it.key, it.value) } })
         o.put("attention", arr(p.attentionFlags))
+        o.put("executiveSummary", arr(SiteSummary.executiveSummary(p)))
+        o.put("quickWins", JSONArray().apply {
+            SiteSummary.quickWins(p).forEach { put(JSONObject().put("title", it.title).put("why", it.why).put("impact", it.impact.label)) }
+        })
         o.put("hosting", JSONObject().put("ip", p.ip ?: JSONObject.NULL).put("provider", p.hostingProvider ?: JSONObject.NULL)
             .put("location", p.hostingLocation ?: JSONObject.NULL).put("asn", p.asn ?: JSONObject.NULL).put("cdn", p.cdn ?: JSONObject.NULL)
             .put("server", p.serverHeader ?: JSONObject.NULL).put("poweredBy", p.poweredBy ?: JSONObject.NULL))
