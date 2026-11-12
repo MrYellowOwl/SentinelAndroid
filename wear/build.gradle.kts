@@ -64,9 +64,9 @@ kotlin {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2025.12.00"))
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.activity:activity-compose:1.12.0")
-    implementation("androidx.core:core-ktx:1.17.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     implementation("androidx.compose.ui:ui")
     // Extended set so PlayArrow / Refresh / Close resolve (they aren't all in material-icons-core).
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
